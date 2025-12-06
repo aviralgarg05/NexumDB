@@ -1,0 +1,9 @@
+# Default owner
+* @aviralgarg05
+
+# Core engine
+/nexum_core/ @aviralgarg05
+/nexum_cli/ @aviralgarg05
+
+# CI/CD
+/.github/ @aviralgarg05
