@@ -191,6 +191,18 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 - `test:` Adding or updating tests
 - `chore:` Maintenance tasks
 
+### Linting GitHub Actions
+
+`actionlint` is a linter that checks GitHub Actions workflow files in `.github/workflows/*.yml` for syntax errors and common issues.
+
+Run it locally using Docker:
+
+```bash
+docker run --rm -v "$(pwd):/repo" -w /repo ghcr.io/rhysd/actionlint:latest -color
+```
+
+If there is no output, it means no issues were found.
+
 ### After Submitting
 
 1. **CI checks**: Ensure all automated checks pass
@@ -274,11 +286,3 @@ Contributors will be recognized in:
 
 Your contributions make NexumDB better for everyone. We appreciate your time and effort in helping improve this project!
 
-### Linting GitHub Actions
-
-You can run `actionlint` locally to check GitHub Actions workflows before pushing.
-
-Run using Docker:
-
-```bash
-docker run --rm -v "$(pwd):/repo" -w /repo ghcr.io/rhysd/actionlint:latest -color
