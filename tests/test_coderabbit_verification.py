@@ -20,5 +20,23 @@ def find_max(numbers):
 
 # TODO: Add error handling for edge cases
 def divide(a, b):
-    """Divide two numbers."""
+    """Divide two numbers.
+    
+    Args:
+        a: Numerator
+        b: Denominator
+        
+    Returns:
+        Result of division
+        
+    Raises:
+        ZeroDivisionError: If b is zero
+    """
+    if b == 0:
+        raise ZeroDivisionError("Cannot divide by zero")
     return a / b
+
+
+def multiply(a, b):
+    """Multiply two numbers."""
+    return a * b
