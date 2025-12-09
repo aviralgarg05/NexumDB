@@ -1,0 +1,12 @@
+version: "3.8"
+services:
+  nexumdb-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nexumdb
+    environment:
+      - PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1
+      - RUST_LOG=info
+    volumes:
+      - ./data:/app/data
