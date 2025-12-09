@@ -1,0 +1,126 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+# CodeRabbit Configuration for NexumDB
+# Enables automatic PR reviews and per-commit incremental reviews
+
+language: "en-US"
+early_access: false
+
+reviews:
+  # Review style - assertive for thorough reviews
+  profile: "assertive"
+  
+  # Don't request changes, just provide feedback
+  request_changes_workflow: false
+  
+  # Generate a high-level summary of changes
+  high_level_summary: true
+  
+  # Show review status in PR
+  review_status: true
+  
+  # Show commit status
+  commit_status: true
+  
+  # Don't collapse the walkthrough
+  collapse_walkthrough: false
+  
+  # Show changed files summary
+  changed_files_summary: true
+  
+  # Generate sequence diagrams for complex flows
+  sequence_diagrams: true
+  
+  # Estimate code review effort
+  estimate_code_review_effort: true
+  
+  # Assess linked issues
+  assess_linked_issues: true
+  
+  # Find related issues and PRs
+  related_issues: true
+  related_prs: true
+  
+  # Suggest labels and reviewers
+  suggested_labels: true
+  suggested_reviewers: true
+  
+  # Show in-progress fortune cookie
+  in_progress_fortune: true
+  
+  # No poem (keeping it professional)
+  poem: false
+
+  # Auto-review configuration
+  auto_review:
+    # Enable automatic reviews
+    enabled: true
+    
+    # Enable incremental reviews on each new commit
+    auto_incremental_review: true
+    
+    # Skip draft PRs
+    drafts: false
+    
+    # Review PRs targeting any branch
+    base_branches: []
+    
+    # Don't ignore any users
+    ignore_usernames: []
+    
+    # Keywords in title that will skip review
+    ignore_title_keywords: []
+    
+    # Labels that trigger review
+    labels: []
+
+  # Tool integrations
+  tools:
+    # Python linting with Ruff
+    ruff:
+      enabled: true
+    
+    # Shell script linting
+    shellcheck:
+      enabled: true
+    
+    # Dockerfile linting
+    hadolint:
+      enabled: true
+    
+    # Markdown linting
+    markdownlint:
+      enabled: true
+    
+    # GitHub checks integration
+    github-checks:
+      enabled: true
+      timeout_ms: 90000
+    
+    # Language tool for documentation
+    languagetool:
+      enabled: true
+      level: "default"
+
+  # Path-specific review instructions
+  path_instructions:
+    - path: "**/*.rs"
+      instructions: "Focus on Rust best practices, memory safety, error handling, and idiomatic code patterns."
+    - path: "**/*.py"
+      instructions: "Check Python code quality, type hints usage, and PEP 8 compliance."
+    - path: "**/Dockerfile"
+      instructions: "Review for security best practices, multi-stage builds optimization, and minimal image size."
+    - path: "**/*.md"
+      instructions: "Check documentation clarity, spelling, grammar, and formatting."
+
+# Chat configuration
+chat:
+  # Enable auto-reply in discussions
+  auto_reply: true
+
+# Knowledge base
+knowledge_base:
+  # Use repository context for better reviews
+  opt_out: false
+  learnings:
+    scope: "auto"
