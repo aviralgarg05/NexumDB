@@ -13,7 +13,7 @@ impl PythonBridge {
 
     pub fn initialize(&mut self) -> Result<()> {
         Python::with_gil(|py| {
-            let sys = py.import_bound("sys")?;
+            let sys = py.import("sys")?;
             let path_attr = sys.getattr("path")?;
             let path = path_attr.downcast::<PyList>()?;
 
@@ -36,7 +36,7 @@ impl PythonBridge {
         }
 
         Python::with_gil(|py| {
-            let nexum_ai = PyModule::import_bound(py, "nexum_ai.optimizer")?;
+            let nexum_ai = PyModule::import(py, "nexum_ai.optimizer")?;
             let semantic_cache = nexum_ai.getattr("SemanticCache")?;
             let cache_instance = semantic_cache.call0()?;
 
@@ -51,7 +51,7 @@ impl PythonBridge {
 
     pub fn test_integration(&self) -> Result<String> {
         Python::with_gil(|py| {
-            let nexum_ai = PyModule::import_bound(py, "nexum_ai.optimizer")?;
+            let nexum_ai = PyModule::import(py, "nexum_ai.optimizer")?;
             let test_func = nexum_ai.getattr("test_vectorization")?;
             let result = test_func.call0()?;
             let result_str: String = result.str()?.extract()?;
@@ -72,7 +72,7 @@ impl SemanticCache {
         bridge.initialize()?;
 
         let cache = Python::with_gil(|py| {
-            let nexum_ai = PyModule::import_bound(py, "nexum_ai.optimizer")?;
+            let nexum_ai = PyModule::import(py, "nexum_ai.optimizer")?;
             let semantic_cache_class = nexum_ai.getattr("SemanticCache")?;
             let cache_instance = semantic_cache_class.call0()?;
             Ok::<PyObject, PyErr>(cache_instance.unbind())
@@ -121,7 +121,7 @@ impl NLTranslator {
         bridge.initialize()?;
 
         let translator = Python::with_gil(|py| {
-            let nexum_ai = PyModule::import_bound(py, "nexum_ai.translator")?;
+            let nexum_ai = PyModule::import(py, "nexum_ai.translator")?;
             let translator_class = nexum_ai.getattr("NLTranslator")?;
             let translator_instance = translator_class.call0()?;
             Ok::<PyObject, PyErr>(translator_instance.unbind())
@@ -152,7 +152,7 @@ mod tests {
     fn check_python_available() -> bool {
         let mut bridge = PythonBridge::new().unwrap();
         bridge.initialize().is_ok()
-            && Python::with_gil(|py| PyModule::import_bound(py, "nexum_ai.optimizer").is_ok())
+            && Python::with_gil(|py| PyModule::import(py, "nexum_ai.optimizer").is_ok())
     }
 
     #[test]
