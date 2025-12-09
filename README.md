@@ -59,6 +59,39 @@ export PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1
 cargo build --release
 ```
 
+## Build, run and stop the application using docker compose
+
+### Build the application
+
+```bash
+$ docker compose build
+```
+
+### Run the application
+
+```bash
+$ docker compose up
+```
+
+### Run an interactive shell
+
+```bash
+$ docker compose up -d
+$ docker exec -it nexumdb nexum
+```
+ 
+### Stop the application 
+
+```bash
+$ docker compose down
+```
+
+### Logs 
+
+```bash 
+$ docker compose logs
+```
+
 ## Python Dependencies
 
 ```bash
