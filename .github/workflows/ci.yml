@@ -44,7 +44,7 @@ jobs:
         run: |
           if ! command -v cargo-audit &> /dev/null; then
             cargo install cargo-audit --locked
-    
+          fi
 
       - name: fmt
         run: cargo fmt --all -- --check
