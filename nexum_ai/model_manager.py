@@ -21,7 +21,7 @@ class ModelManager:
         """
         self.models_dir = Path(models_dir)
         self.models_dir.mkdir(parents=True, exist_ok=True)
-        print(f"ModelManager initialized with directory: {self.models_dir}")
+        print("ModelManager initialized with directory: {self.models_dir}")
     
     def ensure_model(
         self,
