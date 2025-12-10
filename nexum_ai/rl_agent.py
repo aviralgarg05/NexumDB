@@ -163,8 +163,9 @@ class QLearningAgent:
             self.epsilon *= self.epsilon_decay
             self.episode_count += 1
             print(f"Episode {self.episode_count}: epsilon decayed to {self.epsilon:.4f}")
-    
+
     def get_stats(self) -> Dict[str, Union[int, float]]:
+
         """Get agent statistics"""
         return {
             'q_table_size': len(self.q_table),
