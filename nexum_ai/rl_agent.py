@@ -177,7 +177,11 @@ class QLearningAgent:
     
     def save_state(self, filepath: Optional[str] = None) -> None:
         """Save Q-table and agent state to file using joblib"""
-        import joblib
+        try:
+            import joblib
+        except ImportError:
+            print("Warning: joblib not installed, cannot save state")
+            return
         
         if filepath is None:
             filepath = self.state_file
@@ -197,7 +201,12 @@ class QLearningAgent:
     
     def load_state(self, filepath: Optional[str] = None) -> None:
         """Load Q-table and agent state from file using joblib"""
-        import joblib
+        try:
+            import joblib
+        except ImportError:
+            print("Warning: joblib not installed, cannot load state")
+            return
+        
         import os
         
         if filepath is None:
