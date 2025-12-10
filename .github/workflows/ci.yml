@@ -36,7 +36,7 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
             target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
 
           restore-keys: ${{ runner.os }}-cargo-
 
@@ -62,6 +62,8 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           files: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+
 
       - name: Build documentation
         run: cargo doc --workspace --no-deps
@@ -85,6 +87,6 @@ jobs:
           python-version: '3.10'
       - name: Install Python dependencies
         run: pip install -r nexum_ai/requirements-lock.txt
-          python-version: "3.10"
+          
       - name: Byte-compile nexum_ai
         run: python -m compileall nexum_ai
