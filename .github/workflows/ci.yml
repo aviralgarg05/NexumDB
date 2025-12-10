@@ -41,7 +41,10 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
+        run: |
+          if ! command -v cargo-audit &> /dev/null; then
+            cargo install cargo-audit --locked
+          fi
 
       - name: fmt
         run: cargo fmt --all -- --check
@@ -65,10 +68,17 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
+
           python-version: '3.10'
           
       - name: Install Python dependencies
         run: pip install -r nexum_ai/requirements-lock.txt
-        
+
+          cache: "pip"
+          cache-dependency-path: nexum_ai/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r nexum_ai/requirements.txt
+
       - name: Byte-compile nexum_ai
         run: python -m compileall nexum_ai
