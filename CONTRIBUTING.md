@@ -275,7 +275,8 @@ def translate_query(self, natural_language: str) -> str:
 ### Updating dependencies
 
 1. Install pip-tools: `pip install pip-tools`
-2. Update the lock file: `pip-compile requirements.txt -o requirements-lock.txt`
+2. Update the lock file: `pip-compile requirements.txt --output-file=requirements-lock.txt`
+
 3. Commit the updated `requirements-lock.txt` to the repo
 
 
