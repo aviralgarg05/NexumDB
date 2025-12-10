@@ -4,7 +4,7 @@ Learns to optimize query execution strategies based on performance metrics
 """
 
 import numpy as np
-from typing import Dict, Optional
+from typing import Dict, Optional, Union, List
 import json
 import os
 
@@ -165,7 +165,7 @@ class QLearningAgent:
             self.episode_count += 1
             print(f"Episode {self.episode_count}: epsilon decayed to {self.epsilon:.4f}")
     
-    def get_stats(self) -> Dict[str, float]:
+    def get_stats(self) -> Dict[str, Union[int, float]]:
         """Get agent statistics"""
         return {
             'q_table_size': len(self.q_table),
