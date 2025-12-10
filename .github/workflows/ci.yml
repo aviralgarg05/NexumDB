@@ -36,7 +36,8 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
             target
-         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
 
           restore-keys: ${{ runner.os }}-cargo-
 
@@ -54,6 +55,23 @@ jobs:
 
       - name: tests
         run: cargo test --workspace -- --test-threads=1
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Run tests with coverage
+        run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Build documentation
+        run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
 
       - name: Security audit
         run: cargo audit
@@ -80,5 +98,6 @@ jobs:
       - name: Install dependencies
         run: pip install -r nexum_ai/requirements.txt
 
-      - name: Byte-compile nexum_ai
-        run: python -m compileall nexum_ai
+
+      - name: Byte-compile nexum_ai (syntax check)
+        run: python -m compileall -q nexum_ai
