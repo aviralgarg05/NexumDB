@@ -197,7 +197,7 @@ class QLearningAgent:
     
     def load_state(self, filepath: Optional[str] = None) -> None:
         """Load Q-table and agent state from file using joblib"""
-        import joblib
+        
         
         
         if filepath is None:
@@ -205,6 +205,7 @@ class QLearningAgent:
             
         if os.path.exists(filepath):
             try:
+                import joblib
                 data = joblib.load(filepath)
                 self.q_table = data.get('q_table', {})
                 self.epsilon = data.get('epsilon', self.epsilon)
