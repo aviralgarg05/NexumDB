@@ -6,6 +6,14 @@ import numpy as np
 from typing import Optional, List, Dict, Any
 import json
 
+from .stats import analyze
+from .cost_model import cost_scan, cost_filter, cost_nested_loop
+
+def estimate_selectivity(column_stats):
+    return 0.1 
+def estimate_cardinality(table_stats, selectivity):
+    return table_stats.row_count * selectivity
+
 class SemanticCache:
     """
     Caches query results using semantic similarity
@@ -138,6 +146,15 @@ class QueryOptimizer:
         next_state = "completed"
         
         self.update(state, action, reward, next_state)
+def choose_best_join(A_stats, B_stats):
+    cost1 = cost_nested_loop(A_stats.row_count, B_stats.row_count)
+    cost2 = cost_nested_loop(B_stats.row_count, A_stats.row_count)
+    
+    if cost1 <= cost2:
+        return "A JOIN B", cost1
+    else:
+        return "B JOIN A", cost2
+
 
 
 def test_vectorization() -> Dict[str, Any]:
@@ -151,7 +168,21 @@ def test_vectorization() -> Dict[str, Any]:
         'dimension': len(vector)
     }
 
+def optimize(query):
+    tables = query.tables  # e.g., ["A", "B"]
+    A = query.stats["A"]
+    B = query.stats["B"]
+
+    plan, cost = choose_best_join(A, B)
+    return plan, cost
+
+def explain(query):
+    plan, cost = optimize(query)
+    print("Plan:", plan)
+    print("Estimated cost:", cost)
+
 
 if __name__ == "__main__":
     result = test_vectorization()
     print(json.dumps(result, indent=2))
+    
