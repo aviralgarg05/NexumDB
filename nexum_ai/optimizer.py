@@ -9,10 +9,14 @@ import json
 from .stats import analyze
 from .cost_model import cost_scan, cost_filter, cost_nested_loop
 
-def estimate_selectivity(column_stats):
-    return 0.1 
-def estimate_cardinality(table_stats, selectivity):
+from typing import Any
+
+def estimate_selectivity(column_stats: Any) -> float:
+    return 0.1  # placeholder for now
+
+def estimate_cardinality(table_stats: "TableStats", selectivity: float) -> float:
     return table_stats.row_count * selectivity
+
 
 class SemanticCache:
     """
@@ -147,9 +151,10 @@ class QueryOptimizer:
         
         self.update(state, action, reward, next_state)
 def choose_best_join(A_stats, B_stats):
+    # The first argument is treated as the outer table
     cost1 = cost_nested_loop(A_stats.row_count, B_stats.row_count)
     cost2 = cost_nested_loop(B_stats.row_count, A_stats.row_count)
-    
+
     if cost1 <= cost2:
         return "A JOIN B", cost1
     else:
@@ -185,4 +190,3 @@ def explain(query):
 if __name__ == "__main__":
     result = test_vectorization()
     print(json.dumps(result, indent=2))
-    
