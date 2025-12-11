@@ -3,9 +3,13 @@ Natural Language to SQL Translation using local LLMs
 Uses llama-cpp-python for local model inference
 """
 
-from llama_cpp import Llama
 from typing import Optional
 import os
+
+try:
+    from llama_cpp import Llama
+except ImportError:
+    Llama = None
 
 
 class NLTranslator:
@@ -38,18 +42,22 @@ class NLTranslator:
             )
         
         if model_path and os.path.exists(model_path):
-            try:
-                print(f"Loading LLM from {model_path}...")
-                self.model = Llama(
-                    model_path=model_path,
-                    n_ctx=n_ctx,
-                    n_threads=4,
-                    verbose=False
-                )
-                print("LLM loaded successfully")
-            except Exception as e:
-                print(f"Warning: Could not load LLM: {e}")
+            if Llama is None:
+                print("Warning: llama-cpp-python not installed. NL translation will use fallback.")
                 self.model = None
+            else:
+                try:
+                    print(f"Loading LLM from {model_path}...")
+                    self.model = Llama(
+                        model_path=model_path,
+                        n_ctx=n_ctx,
+                        n_threads=4,
+                        verbose=False
+                    )
+                    print("LLM loaded successfully")
+                except Exception as e:
+                    print(f"Warning: Could not load LLM: {e}")
+                    self.model = None
         else:
             print("Warning: No model path provided or download failed. NL translation will use fallback.")
     
