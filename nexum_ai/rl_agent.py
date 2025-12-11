@@ -4,7 +4,9 @@ Learns to optimize query execution strategies based on performance metrics
 """
 
 import numpy as np
-from typing import Dict, Optional
+
+from typing import Dict, Optional, Union
+
 
 
 class QLearningAgent:
@@ -198,43 +200,33 @@ class QLearningAgent:
         except Exception as e:
             print(f"Error saving agent state: {e}")
     
-<<<<<<< HEAD
-        def load_state(self, filepath: Optional[str] = None) -> None:
-            """Load Q-table and agent state from file using joblib"""
+            def load_state(self, filepath: Optional[str] = None) -> None:
+                """Load Q-table and agent state from file using joblib"""
 
-=======
-    def load_state(self, filepath: Optional[str] = None) -> None:
-        """Load Q-table and agent state from file using joblib"""
-       
-        try:
-            import joblib
-        except ImportError:
-            print("Warning: joblib not installed, cannot load state")
-            return
-        
->>>>>>> ff9bdedd26c6960baca22c7aa67a99e4a3b50a11
-        if filepath is None:
-            filepath = self.state_file
-
-        if os.path.exists(filepath):
-            try:
-                import joblib
-            except ImportError:
-                print("Warning: joblib not installed, cannot load state")
-                return
+            if filepath is None:
+                filepath = self.state_file
 
             try:
-                state = joblib.load(filepath)
-                self.q_table = state.get("q_table", {})
-                self.epsilon = state.get("epsilon", self.epsilon)
-                self.episode_count = state.get("episode_count", self.episode_count)
-                print(f"Loaded agent state from {filepath}")
+                data = joblib.load(filepath)
+
+                self.q_table = data.get("q_table", {})
+                self.learning_rate = data.get("learning_rate", self.learning_rate)
+                self.discount_factor = data.get("discount_factor", self.discount_factor)
+                self.epsilon = data.get("epsilon", self.epsilon)
+                self.state_file = data.get("state_file", self.state_file)
+
+                print(f"Agent state successfully loaded from {filepath}")
+
+            except FileNotFoundError:
+                print("No saved agent state found.")
             except Exception as e:
                 print(f"Failed to load state: {e}")
+
 
 def test_rl_agent() -> None:
     """Test the RL agent with simulated queries"""
     agent = QLearningAgent(learning_rate=0.1, epsilon=0.3)
+
     
     print("\n" + "="*60)
     print("RL Agent Training Simulation")
