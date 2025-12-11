@@ -6,16 +6,15 @@ import numpy as np
 from typing import Optional, List, Dict, Any
 import json
 
-from .stats import analyze
-from .cost_model import cost_scan, cost_filter, cost_nested_loop
+from .cost_model import cost_nested_loop
 
-from typing import Any
 
 def estimate_selectivity(column_stats: Any) -> float:
     return 0.1  # placeholder for now
 
-def estimate_cardinality(table_stats: "TableStats", selectivity: float) -> float:
+def estimate_cardinality(table_stats: Any, selectivity: float) -> float:
     return table_stats.row_count * selectivity
+
 
 
 class SemanticCache:
@@ -174,12 +173,12 @@ def test_vectorization() -> Dict[str, Any]:
     }
 
 def optimize(query):
-    tables = query.tables  # e.g., ["A", "B"]
     A = query.stats["A"]
     B = query.stats["B"]
 
     plan, cost = choose_best_join(A, B)
     return plan, cost
+
 
 def explain(query):
     plan, cost = optimize(query)
