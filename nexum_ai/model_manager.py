@@ -82,7 +82,7 @@ class ModelManager:
                 print(f"Model downloaded successfully to {final_path}")
                 return str(final_path)
             else:
-                print(f"Model download completed but file not found at expected location")
+                print("Model download completed but file not found at expected location")
                 return downloaded_path if os.path.exists(downloaded_path) else None
                 
         except ImportError:

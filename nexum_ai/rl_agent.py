@@ -5,8 +5,6 @@ Learns to optimize query execution strategies based on performance metrics
 
 import numpy as np
 from typing import Dict, Optional
-import json
-import os
 
 
 class QLearningAgent:
