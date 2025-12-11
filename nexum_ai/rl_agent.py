@@ -4,8 +4,7 @@ Learns to optimize query execution strategies based on performance metrics
 """
 
 import numpy as np
-from typing import Dict, Optional, Union
-import os
+from typing import Dict, Optional
 
 
 class QLearningAgent:
@@ -199,9 +198,21 @@ class QLearningAgent:
         except Exception as e:
             print(f"Error saving agent state: {e}")
     
+<<<<<<< HEAD
         def load_state(self, filepath: Optional[str] = None) -> None:
             """Load Q-table and agent state from file using joblib"""
 
+=======
+    def load_state(self, filepath: Optional[str] = None) -> None:
+        """Load Q-table and agent state from file using joblib"""
+       
+        try:
+            import joblib
+        except ImportError:
+            print("Warning: joblib not installed, cannot load state")
+            return
+        
+>>>>>>> ff9bdedd26c6960baca22c7aa67a99e4a3b50a11
         if filepath is None:
             filepath = self.state_file
 

@@ -36,7 +36,8 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
           restore-keys: ${{ runner.os }}-cargo-
 
@@ -66,6 +67,7 @@ jobs:
         with:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
+        if: always()
 
       - name: Build documentation
         run: cargo doc --workspace --no-deps
@@ -85,39 +87,22 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-
           python-version: '3.10'
           cache: 'pip'
-      - name: Install ruff
-        run: pip install ruff
-
-      - name: Lint Python
-        run: ruff check nexum_ai/
-          
-
-      - name: Install Python dependencies
-        run: pip install -r nexum_ai/requirements-lock.txt
-        
-      - name: Byte-compile nexum_ai
-        run: python -m compileall nexum_ai
-
-      - name: Byte-compile nexum_ai (syntax check)
-<<<<<<< HEAD
-        run: python -m compileall -q nexum_ai
-=======
-        run: python -m compileall -q nexum_ai
-
-
-          cache: 'pip'
+          cache-dependency-path: nexum_ai/requirements.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r nexum_ai/requirements.txt
+          pip install ruff
+          pip install -r nexum_ai/requirements-lock.txt
           pip install -r nexum_ai/tests/requirements.txt
 
+      - name: Lint Python
+        run: ruff check nexum_ai/
+
       - name: Byte-compile nexum_ai
-        run: python -m compileall nexum_ai
+        run: python -m compileall -q nexum_ai
 
       - name: Run pytest
         run: |
@@ -131,5 +116,4 @@ jobs:
           flags: python
           name: nexum_ai-coverage
           token: ${{ secrets.CODECOV_TOKEN }}
-
->>>>>>> 2ce7388dec5f906d8dba0d5a237cf5e39e17692e
+        if: always()
