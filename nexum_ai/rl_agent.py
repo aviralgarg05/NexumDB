@@ -199,40 +199,27 @@ class QLearningAgent:
         except Exception as e:
             print(f"Error saving agent state: {e}")
     
-    def load_state(self, filepath: Optional[str] = None) -> None:
-        """Load Q-table and agent state from file using joblib"""
-<<<<<<< HEAD
-        
-=======
+        def load_state(self, filepath: Optional[str] = None) -> None:
+            """Load Q-table and agent state from file using joblib"""
 
-        import joblib
-
-        try:
-            import joblib
-        except ImportError:
-            print("Warning: joblib not installed, cannot load state")
-            return
->>>>>>> 2ce7388dec5f906d8dba0d5a237cf5e39e17692e
-        
-       
-
-        
         if filepath is None:
             filepath = self.state_file
-            
+
         if os.path.exists(filepath):
             try:
                 import joblib
-                data = joblib.load(filepath)
-                self.q_table = data.get('q_table', {})
-                self.epsilon = data.get('epsilon', self.epsilon)
-                self.episode_count = data.get('episode_count', 0)
-                print(f"Agent state loaded from {filepath}: {len(self.q_table)} states, epsilon={self.epsilon:.4f}")
-            except Exception as e:
-                print(f"Error loading agent state: {e}")
-        else:
-            print(f"No saved state found at {filepath}, starting fresh")
+            except ImportError:
+                print("Warning: joblib not installed, cannot load state")
+                return
 
+            try:
+                state = joblib.load(filepath)
+                self.q_table = state.get("q_table", {})
+                self.epsilon = state.get("epsilon", self.epsilon)
+                self.episode_count = state.get("episode_count", self.episode_count)
+                print(f"Loaded agent state from {filepath}")
+            except Exception as e:
+                print(f"Failed to load state: {e}")
 
 def test_rl_agent() -> None:
     """Test the RL agent with simulated queries"""
