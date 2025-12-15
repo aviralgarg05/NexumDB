@@ -1,20 +1,35 @@
+import unittest
 from nexum_ai.stats import TableStats
 from nexum_ai.optimizer import estimate_selectivity, estimate_cardinality
 
-# --- Create fake table stats ---
-table_stats = TableStats()
-table_stats.row_count = 1000
-table_stats.distinct = {"x": set(range(10)), "y": set(range(5))}
 
-# --- Test estimate_selectivity ---
-sel_x = estimate_selectivity(table_stats, "x")
-sel_y = estimate_selectivity(table_stats, "y")
-sel_missing = estimate_selectivity(table_stats, "z")  # column not in table
+class TestOptimizerHelpers(unittest.TestCase):
+    def setUp(self):
+        """Create fake table stats for testing."""
+        self.table_stats = TableStats()
+        self.table_stats.row_count = 1000
+        self.table_stats.distinct = {
+            "x": set(range(10)),
+            "y": set(range(5)),
+        }
 
-print(f"Selectivity x: {sel_x}")         # Expected: 0.1
-print(f"Selectivity y: {sel_y}")         # Expected: 0.2
-print(f"Selectivity missing: {sel_missing}")  # Expected: 0.1 fallback
+    def test_estimate_selectivity_with_distinct_values(self):
+        sel_x = estimate_selectivity(self.table_stats, "x")
+        sel_y = estimate_selectivity(self.table_stats, "y")
 
-# --- Test estimate_cardinality ---
-card_x = estimate_cardinality(table_stats, sel_x)
-print(f"Cardinality for x: {card_x}")    # Expected: 1000 * 0.1 = 100.0
+        self.assertAlmostEqual(sel_x, 0.1, places=6)
+        self.assertAlmostEqual(sel_y, 0.2, places=6)
+
+    def test_estimate_selectivity_fallback_for_missing_column(self):
+        sel_missing = estimate_selectivity(self.table_stats, "z")
+        self.assertEqual(sel_missing, 0.1)
+
+    def test_estimate_cardinality(self):
+        sel_x = estimate_selectivity(self.table_stats, "x")
+        card_x = estimate_cardinality(self.table_stats, sel_x)
+
+        self.assertAlmostEqual(card_x, 100.0, places=6)
+
+
+if __name__ == "__main__":
+    unittest.main()
