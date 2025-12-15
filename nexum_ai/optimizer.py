@@ -7,12 +7,23 @@ from typing import Optional, List, Dict, Any
 import json
 
 from .cost_model import cost_nested_loop
+from .stats import TableStats  # only import TableStats
 
+def estimate_selectivity(table_stats: TableStats, column_name: str) -> float:
+    """
+    Estimate selectivity for a column in a table.
+    Uses distinct count if available, fallback to 0.1
+    """
+    if column_name in table_stats.distinct:
+        distinct_count = len(table_stats.distinct[column_name])
+        if distinct_count > 0:
+            return 1.0 / distinct_count
+    return 0.1  # fallback
 
-def estimate_selectivity(column_stats: Any) -> float:
-    return 0.1  # placeholder for now
-
-def estimate_cardinality(table_stats: Any, selectivity: float) -> float:
+def estimate_cardinality(table_stats: TableStats, selectivity: float) -> float:
+    """
+    Estimate number of rows returned after applying a filter.
+    """
     return table_stats.row_count * selectivity
 
 
