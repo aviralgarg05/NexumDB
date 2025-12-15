@@ -183,44 +183,47 @@ class QLearningAgent:
         except ImportError:
             print("Warning: joblib not installed, cannot save state")
             return
-        
+
         if filepath is None:
             filepath = self.state_file
-            
+
         data = {
-            'q_table': self.q_table,
-            'epsilon': self.epsilon,
-            'episode_count': self.episode_count,
-            'history_size': len(self.training_history)
+            "q_table": self.q_table,
+            "epsilon": self.epsilon,
+            "episode_count": self.episode_count,
         }
-        
+
         try:
             joblib.dump(data, filepath)
             print(f"Agent state saved to {filepath}")
         except Exception as e:
             print(f"Error saving agent state: {e}")
-    
-            def load_state(self, filepath: Optional[str] = None) -> None:
-                """Load Q-table and agent state from file using joblib"""
 
-            if filepath is None:
-                filepath = self.state_file
+    def load_state(self, filepath: Optional[str] = None) -> None:
+        """Load Q-table and agent state from file using joblib"""
+        try:
+            import joblib
+        except ImportError:
+            print("Warning: joblib not installed, cannot load state")
+            return
 
-            try:
-                data = joblib.load(filepath)
+        if filepath is None:
+            filepath = self.state_file
 
-                self.q_table = data.get("q_table", {})
-                self.learning_rate = data.get("learning_rate", self.learning_rate)
-                self.discount_factor = data.get("discount_factor", self.discount_factor)
-                self.epsilon = data.get("epsilon", self.epsilon)
-                self.state_file = data.get("state_file", self.state_file)
+        try:
+            data = joblib.load(filepath)
 
-                print(f"Agent state successfully loaded from {filepath}")
+            self.q_table = data.get("q_table", {})
+            self.epsilon = data.get("epsilon", self.epsilon)
+            self.episode_count = data.get("episode_count", self.episode_count)
 
-            except FileNotFoundError:
-                print("No saved agent state found.")
-            except Exception as e:
-                print(f"Failed to load state: {e}")
+            print(f"Agent state successfully loaded from {filepath}")
+
+        except FileNotFoundError:
+            # Tests EXPECT no crash if file is missing
+            print("No saved agent state found.")
+        except Exception as e:
+            print(f"Failed to load state: {e}")
 
 
 def test_rl_agent() -> None:
