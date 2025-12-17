@@ -4,7 +4,9 @@ Learns to optimize query execution strategies based on performance metrics
 """
 
 import numpy as np
-from typing import Dict, Optional
+
+from typing import Dict, Optional, Union
+
 
 
 class QLearningAgent:
@@ -162,8 +164,9 @@ class QLearningAgent:
             self.epsilon *= self.epsilon_decay
             self.episode_count += 1
             print(f"Episode {self.episode_count}: epsilon decayed to {self.epsilon:.4f}")
-    
-    def get_stats(self) -> Dict[str, float]:
+
+    def get_stats(self) -> Dict[str, Union[int, float]]:
+
         """Get agent statistics"""
         return {
             'q_table_size': len(self.q_table),
@@ -180,23 +183,22 @@ class QLearningAgent:
         except ImportError:
             print("Warning: joblib not installed, cannot save state")
             return
-        
+
         if filepath is None:
             filepath = self.state_file
-            
+
         data = {
-            'q_table': self.q_table,
-            'epsilon': self.epsilon,
-            'episode_count': self.episode_count,
-            'history_size': len(self.training_history)
+            "q_table": self.q_table,
+            "epsilon": self.epsilon,
+            "episode_count": self.episode_count,
         }
-        
+
         try:
             joblib.dump(data, filepath)
             print(f"Agent state saved to {filepath}")
         except Exception as e:
             print(f"Error saving agent state: {e}")
-    
+
     def load_state(self, filepath: Optional[str] = None) -> None:
         """Load Q-table and agent state from file using joblib"""
         try:
@@ -204,28 +206,30 @@ class QLearningAgent:
         except ImportError:
             print("Warning: joblib not installed, cannot load state")
             return
-        
-        import os
-        
+
         if filepath is None:
             filepath = self.state_file
-            
-        if os.path.exists(filepath):
-            try:
-                data = joblib.load(filepath)
-                self.q_table = data.get('q_table', {})
-                self.epsilon = data.get('epsilon', self.epsilon)
-                self.episode_count = data.get('episode_count', 0)
-                print(f"Agent state loaded from {filepath}: {len(self.q_table)} states, epsilon={self.epsilon:.4f}")
-            except Exception as e:
-                print(f"Error loading agent state: {e}")
-        else:
-            print(f"No saved state found at {filepath}, starting fresh")
+
+        try:
+            data = joblib.load(filepath)
+
+            self.q_table = data.get("q_table", {})
+            self.epsilon = data.get("epsilon", self.epsilon)
+            self.episode_count = data.get("episode_count", self.episode_count)
+
+            print(f"Agent state successfully loaded from {filepath}")
+
+        except FileNotFoundError:
+            # Tests EXPECT no crash if file is missing
+            print("No saved agent state found.")
+        except Exception as e:
+            print(f"Failed to load state: {e}")
 
 
 def test_rl_agent() -> None:
     """Test the RL agent with simulated queries"""
     agent = QLearningAgent(learning_rate=0.1, epsilon=0.3)
+
     
     print("\n" + "="*60)
     print("RL Agent Training Simulation")

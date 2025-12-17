@@ -29,3 +29,8 @@ Thumbs.db
 
 #Ignore vscode AI rules
 .github/instructions/codacy.instructions.md
+
+# Coverage reports
+coverage.xml
+htmlcov/
+.coverage
