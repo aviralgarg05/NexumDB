@@ -30,6 +30,20 @@ class TestOptimizerHelpers(unittest.TestCase):
 
         self.assertAlmostEqual(card_x, 100.0, places=6)
 
+    def test_optimizer_helpers_prefer_lower_cardinality(self):
+        """
+        Beginner-level higher test:
+        lower selectivity should lead to lower estimated cardinality.
+        """
+
+        sel_x = estimate_selectivity(self.table_stats, "x")  # 0.1
+        sel_y = estimate_selectivity(self.table_stats, "y")  # 0.2
+
+        card_x = estimate_cardinality(self.table_stats, sel_x)
+        card_y = estimate_cardinality(self.table_stats, sel_y)
+
+        # Optimizer intuition: smaller cardinality is cheaper
+        self.assertLess(card_x, card_y)
 
 if __name__ == "__main__":
     unittest.main()
