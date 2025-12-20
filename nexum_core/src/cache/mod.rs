@@ -27,7 +27,7 @@
 //! cache.put("SELECT * FROM users", &data_hash, &result)?;
 //! ```
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
@@ -229,14 +229,44 @@ impl ResultCache {
             return Ok(());
         }
 
-        if self.cache_dir.exists() {
-            for entry in fs::read_dir(&self.cache_dir)? {
-                let entry = entry?;
-                if entry.path().extension().and_then(|s| s.to_str()) == Some("json") {
-                    fs::remove_file(entry.path())?;
+        if !self.cache_dir.exists() {
+            return Ok(());
+        }
+
+        let mut removed_count = 0;
+        let mut failed_removals = Vec::new();
+
+        for entry in fs::read_dir(&self.cache_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            
+            if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                match fs::remove_file(&path) {
+                    Ok(_) => removed_count += 1,
+                    Err(e) => {
+                        failed_removals.push((path, e));
+                    }
                 }
             }
-            println!("Cache cleared");
+        }
+
+        // Report results
+        if removed_count > 0 {
+            println!("Cache cleared: {} entries removed", removed_count);
+        }
+
+        // Report any failures
+        if !failed_removals.is_empty() {
+            for (path, error) in &failed_removals {
+                println!("Warning: Failed to remove cache file {:?}: {}", path, error);
+            }
+            // Only fail if we couldn't remove ANY files and there were files to remove
+            if removed_count == 0 && !failed_removals.is_empty() {
+                return Err(anyhow!(
+                    "Failed to clear cache. {} removal failures.",
+                    failed_removals.len()
+                ));
+            }
         }
 
         Ok(())
@@ -253,6 +283,7 @@ impl ResultCache {
         }
 
         let mut removed_count = 0;
+        let mut failed_removals = Vec::new();
 
         for entry in fs::read_dir(&self.cache_dir)? {
             let entry = entry?;
@@ -267,8 +298,12 @@ impl ResultCache {
                 if let Ok(cache_entry) = serde_json::from_str::<CacheEntry>(&content) {
                     // More precise table name matching to avoid over-invalidation
                     if self.query_references_table(&cache_entry.query, table_name) {
-                        fs::remove_file(&path)?;
-                        removed_count += 1;
+                        match fs::remove_file(&path) {
+                            Ok(_) => removed_count += 1,
+                            Err(e) => {
+                                failed_removals.push((path.clone(), e));
+                            }
+                        }
                     }
                 }
             }
@@ -277,11 +312,29 @@ impl ResultCache {
         // Also invalidate the table hash file to force recomputation
         let table_hash_file = self.table_hash_file_path(table_name);
         if table_hash_file.exists() {
-            fs::remove_file(&table_hash_file)?;
+            if let Err(e) = fs::remove_file(&table_hash_file) {
+                failed_removals.push((table_hash_file, e));
+            }
         }
 
+        // Report results
         if removed_count > 0 {
             println!("Invalidated {} cache entries for table: {}", removed_count, table_name);
+        }
+
+        // Report any failures but don't fail the entire operation
+        if !failed_removals.is_empty() {
+            for (path, error) in &failed_removals {
+                println!("Warning: Failed to remove cache file {:?}: {}", path, error);
+            }
+            // Only fail if we couldn't remove ANY files and there were files to remove
+            if removed_count == 0 && !failed_removals.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "Failed to invalidate any cache entries for table: {}. {} removal failures.",
+                    table_name,
+                    failed_removals.len()
+                ));
+            }
         }
 
         Ok(())
@@ -439,6 +492,27 @@ mod tests {
         // All entries should be gone
         assert!(cache.get("SELECT 1", 111).unwrap().is_none());
         assert!(cache.get("SELECT 2", 222).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_partial_invalidation_resilience() {
+        let temp_dir = TempDir::new().unwrap();
+        let cache = ResultCache::new(temp_dir.path()).unwrap();
+
+        // Add entries for different tables
+        cache.put("SELECT * FROM users", 111, "result1").unwrap();
+        cache.put("SELECT * FROM orders", 222, "result2").unwrap();
+
+        // Even if some file removals fail, the operation should continue
+        // and remove what it can. This test verifies the method doesn't
+        // fail completely on partial failures.
+        let result = cache.invalidate_table("users");
+        
+        // Should succeed even if some files couldn't be removed
+        assert!(result.is_ok());
+        
+        // At minimum, should have attempted to remove the users cache
+        assert!(cache.get("SELECT * FROM users", 111).unwrap().is_none());
     }
 
     #[test]
