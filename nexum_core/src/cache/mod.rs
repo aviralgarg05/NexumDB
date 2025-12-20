@@ -16,7 +16,7 @@
 //! use nexum_core::cache::ResultCache;
 //!
 //! let cache = ResultCache::new(".nexum/cache")?;
-//! 
+//!
 //! // Try to get cached result
 //! if let Some(result) = cache.get("SELECT * FROM users", &data_hash)? {
 //!     return result;
@@ -65,7 +65,7 @@ impl ResultCache {
     /// Create a new result cache with the specified directory
     pub fn new<P: AsRef<Path>>(cache_dir: P) -> Result<Self> {
         let cache_dir = cache_dir.as_ref().to_path_buf();
-        
+
         // Create cache directory if it doesn't exist
         if !cache_dir.exists() {
             fs::create_dir_all(&cache_dir)?;
@@ -106,7 +106,8 @@ impl ResultCache {
 
     /// Get table hash file path
     fn table_hash_file_path(&self, table_name: &str) -> PathBuf {
-        self.cache_dir.join(format!("table_hash_{}.json", table_name))
+        self.cache_dir
+            .join(format!("table_hash_{}.json", table_name))
     }
 
     /// Get or compute table hash efficiently
@@ -116,7 +117,7 @@ impl ResultCache {
         }
 
         let hash_file = self.table_hash_file_path(table_name);
-        
+
         // Try to read existing hash
         if let Ok(content) = fs::read_to_string(&hash_file) {
             if let Ok(hash_entry) = serde_json::from_str::<TableHashEntry>(&content) {
@@ -126,11 +127,14 @@ impl ResultCache {
                 return hash_entry.data_hash;
             }
         }
-        
+
         // Compute and store new hash only if no valid stored hash exists
         let hash = self.compute_table_hash(storage_data);
         if let Err(e) = self.update_table_hash(table_name, hash) {
-            println!("Warning: Failed to update table hash for {}: {}", table_name, e);
+            println!(
+                "Warning: Failed to update table hash for {}: {}",
+                table_name, e
+            );
         }
         hash
     }
@@ -146,9 +150,7 @@ impl ResultCache {
 
     /// Update table hash file
     fn update_table_hash(&self, table_name: &str, hash: u64) -> Result<()> {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)?
-            .as_secs();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
         let hash_entry = TableHashEntry {
             table_name: table_name.to_string(),
@@ -159,7 +161,7 @@ impl ResultCache {
         let content = serde_json::to_string(&hash_entry)?;
         let hash_file = self.table_hash_file_path(table_name);
         fs::write(&hash_file, content)?;
-        
+
         Ok(())
     }
 
@@ -192,7 +194,11 @@ impl ResultCache {
     }
 
     /// Get table data hash efficiently (public method for executor)
-    pub fn get_table_data_hash(&self, table_name: &str, storage_data: &[(Vec<u8>, Vec<u8>)]) -> u64 {
+    pub fn get_table_data_hash(
+        &self,
+        table_name: &str,
+        storage_data: &[(Vec<u8>, Vec<u8>)],
+    ) -> u64 {
         self.get_table_hash(table_name, storage_data)
     }
 
@@ -205,9 +211,7 @@ impl ResultCache {
         let key = self.cache_key(query, data_hash);
         let cache_file = self.cache_file_path(&key);
 
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)?
-            .as_secs();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
         let entry = CacheEntry {
             result: result.to_string(),
@@ -239,7 +243,7 @@ impl ResultCache {
         for entry in fs::read_dir(&self.cache_dir)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 match fs::remove_file(&path) {
                     Ok(_) => removed_count += 1,
@@ -319,7 +323,10 @@ impl ResultCache {
 
         // Report results
         if removed_count > 0 {
-            println!("Invalidated {} cache entries for table: {}", removed_count, table_name);
+            println!(
+                "Invalidated {} cache entries for table: {}",
+                removed_count, table_name
+            );
         }
 
         // Report any failures but don't fail the entire operation
@@ -344,25 +351,28 @@ impl ResultCache {
     fn query_references_table(&self, query: &str, table_name: &str) -> bool {
         let query_lower = query.to_lowercase();
         let table_lower = table_name.to_lowercase();
-        
+
         // Look for table name with word boundaries (spaces, commas, parentheses, etc.)
         let word_boundaries = [" ", "\t", "\n", "(", ")", ",", ";"];
-        
+
         // Check if table name appears after FROM, JOIN, UPDATE, INSERT INTO, etc.
         let table_keywords = ["from ", "join ", "update ", "insert into ", "into "];
-        
+
         for keyword in &table_keywords {
             if let Some(pos) = query_lower.find(&format!("{}{}", keyword, table_lower)) {
                 let end_pos = pos + keyword.len() + table_lower.len();
-                
+
                 // Check if the character after the table name is a word boundary or end of string
-                if end_pos >= query_lower.len() || 
-                   word_boundaries.iter().any(|&boundary| query_lower[end_pos..].starts_with(boundary)) {
+                if end_pos >= query_lower.len()
+                    || word_boundaries
+                        .iter()
+                        .any(|&boundary| query_lower[end_pos..].starts_with(boundary))
+                {
                     return true;
                 }
             }
         }
-        
+
         false
     }
 
@@ -399,8 +409,16 @@ impl ResultCache {
         Ok(CacheStats {
             total_entries,
             total_size_bytes: total_size,
-            oldest_entry_timestamp: if oldest_timestamp == u64::MAX { None } else { Some(oldest_timestamp) },
-            newest_entry_timestamp: if newest_timestamp == 0 { None } else { Some(newest_timestamp) },
+            oldest_entry_timestamp: if oldest_timestamp == u64::MAX {
+                None
+            } else {
+                Some(oldest_timestamp)
+            },
+            newest_entry_timestamp: if newest_timestamp == 0 {
+                None
+            } else {
+                Some(newest_timestamp)
+            },
         })
     }
 }
@@ -419,7 +437,7 @@ pub fn calculate_data_hash(data: &[u8]) -> u64 {
     let mut hasher = Sha256::new();
     hasher.update(data);
     let result = hasher.finalize();
-    
+
     // Convert first 8 bytes of SHA-256 hash to u64 for compatibility
     let mut bytes = [0u8; 8];
     bytes.copy_from_slice(&result[0..8]);
@@ -512,10 +530,10 @@ mod tests {
         // and remove what it can. This test verifies the method doesn't
         // fail completely on partial failures.
         let result = cache.invalidate_table("users");
-        
+
         // Should succeed even if some files couldn't be removed
         assert!(result.is_ok());
-        
+
         // At minimum, should have attempted to remove the users cache
         assert!(cache.get("SELECT * FROM users", 111).unwrap().is_none());
     }
@@ -527,17 +545,19 @@ mod tests {
 
         cache.put("SELECT * FROM users", 111, "result1").unwrap();
         cache.put("SELECT * FROM orders", 222, "result2").unwrap();
-        cache.put("SELECT * FROM user_logs", 333, "result3").unwrap(); // Should not be invalidated
+        cache
+            .put("SELECT * FROM user_logs", 333, "result3")
+            .unwrap(); // Should not be invalidated
 
         // Invalidate users table
         cache.invalidate_table("users").unwrap();
 
         // Users query should be invalidated
         assert!(cache.get("SELECT * FROM users", 111).unwrap().is_none());
-        
+
         // Orders query should still be cached
         assert!(cache.get("SELECT * FROM orders", 222).unwrap().is_some());
-        
+
         // user_logs should still be cached (precise matching)
         assert!(cache.get("SELECT * FROM user_logs", 333).unwrap().is_some());
     }
@@ -586,24 +606,27 @@ mod tests {
 
         // Same data should produce same hash
         assert_eq!(hash1, hash2);
-        
+
         // Different data should produce different hash
         assert_ne!(hash1, hash3);
 
         // Test cache key stability
         let temp_dir = TempDir::new().unwrap();
         let cache = ResultCache::new(temp_dir.path()).unwrap();
-        
+
         let key1 = cache.cache_key("SELECT * FROM users", 12345);
         let key2 = cache.cache_key("SELECT * FROM users", 12345);
         let key3 = cache.cache_key("SELECT * FROM orders", 12345);
 
         // Same inputs should produce same key
         assert_eq!(key1, key2);
-        
+
         // Different inputs should produce different key
         assert_ne!(key1, key3);
-        
+
+        // Keys should be reasonable length (SHA-256 hex = 64 chars)
+        assert_eq!(key1.len(), 64);
+
         // Keys should be reasonable length (SHA-256 hex = 64 chars)
         assert_eq!(key1.len(), 64);
     }

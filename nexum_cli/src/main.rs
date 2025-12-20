@@ -15,13 +15,13 @@ fn main() -> anyhow::Result<()> {
     }
 
     let storage = StorageEngine::new("./nexumdb_data")?;
-    
+
     let executor = if no_cache {
-        Executor::new_with_cache_disabled(storage.clone()).with_cache()
+        Executor::new_with_cache_disabled(storage.clone())
     } else {
         Executor::new(storage.clone()).with_cache()
     };
-    
+
     let catalog = Catalog::new(storage);
 
     let nl_translator = match NLTranslator::new() {
@@ -66,30 +66,26 @@ fn main() -> anyhow::Result<()> {
         // Handle cache commands
         if input.to_uppercase().starts_with("CACHE ") {
             let cache_cmd = input[6..].trim().to_uppercase();
-            
+
             match cache_cmd.as_str() {
-                "STATS" => {
-                    match executor.cache_stats() {
-                        Ok(stats) => {
-                            println!("Cache Statistics:");
-                            println!("  Total entries: {}", stats.total_entries);
-                            println!("  Total size: {} bytes", stats.total_size_bytes);
-                            if let Some(oldest) = stats.oldest_entry_timestamp {
-                                println!("  Oldest entry: {} (unix timestamp)", oldest);
-                            }
-                            if let Some(newest) = stats.newest_entry_timestamp {
-                                println!("  Newest entry: {} (unix timestamp)", newest);
-                            }
+                "STATS" => match executor.cache_stats() {
+                    Ok(stats) => {
+                        println!("Cache Statistics:");
+                        println!("  Total entries: {}", stats.total_entries);
+                        println!("  Total size: {} bytes", stats.total_size_bytes);
+                        if let Some(oldest) = stats.oldest_entry_timestamp {
+                            println!("  Oldest entry: {} (unix timestamp)", oldest);
                         }
-                        Err(e) => eprintln!("Error getting cache stats: {}", e),
+                        if let Some(newest) = stats.newest_entry_timestamp {
+                            println!("  Newest entry: {} (unix timestamp)", newest);
+                        }
                     }
-                }
-                "CLEAR" => {
-                    match executor.clear_cache() {
-                        Ok(_) => println!("Cache cleared successfully"),
-                        Err(e) => eprintln!("Error clearing cache: {}", e),
-                    }
-                }
+                    Err(e) => eprintln!("Error getting cache stats: {}", e),
+                },
+                "CLEAR" => match executor.clear_cache() {
+                    Ok(_) => println!("Cache cleared successfully"),
+                    Err(e) => eprintln!("Error clearing cache: {}", e),
+                },
                 _ => {
                     eprintln!("Unknown cache command. Use 'CACHE STATS' or 'CACHE CLEAR'");
                 }

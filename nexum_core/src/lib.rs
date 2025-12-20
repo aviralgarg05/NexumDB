@@ -20,7 +20,7 @@ pub mod storage;
 pub use bridge::{NLTranslator, PythonBridge, SemanticCache};
 
 /// Re-exports for result caching functionality.
-pub use cache::{ResultCache, CacheStats};
+pub use cache::{CacheStats, ResultCache};
 
 /// Re-export of the main Catalog used by Nexum.
 pub use catalog::Catalog;
