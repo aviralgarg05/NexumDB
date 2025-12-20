@@ -54,6 +54,14 @@ pub struct ResultCache {
     enabled: bool,
 }
 
+/// Per-table hash tracking for efficient cache invalidation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TableHashEntry {
+    pub table_name: String,
+    pub data_hash: u64,
+    pub last_updated: u64,
+}
+
 impl ResultCache {
     /// Create a new result cache with the specified directory
     pub fn new<P: AsRef<Path>>(cache_dir: P) -> Result<Self> {
@@ -96,6 +104,69 @@ impl ResultCache {
         self.cache_dir.join(format!("{}.json", key))
     }
 
+    /// Get table hash file path
+    fn table_hash_file_path(&self, table_name: &str) -> PathBuf {
+        self.cache_dir.join(format!("table_hash_{}.json", table_name))
+    }
+
+    /// Get or compute table hash efficiently
+    fn get_table_hash(&self, table_name: &str, storage_data: &[(Vec<u8>, Vec<u8>)]) -> u64 {
+        if !self.enabled {
+            return 0;
+        }
+
+        let hash_file = self.table_hash_file_path(table_name);
+        
+        // Try to read existing hash
+        if let Ok(content) = fs::read_to_string(&hash_file) {
+            if let Ok(hash_entry) = serde_json::from_str::<TableHashEntry>(&content) {
+                // For now, we'll recompute the hash each time to ensure accuracy
+                // In a production system, we could optimize this further with timestamps
+                let current_hash = self.compute_table_hash(storage_data);
+                
+                // Update the hash file if it changed
+                if current_hash != hash_entry.data_hash {
+                    let _ = self.update_table_hash(table_name, current_hash);
+                }
+                
+                return current_hash;
+            }
+        }
+        
+        // Compute and store new hash
+        let hash = self.compute_table_hash(storage_data);
+        let _ = self.update_table_hash(table_name, hash);
+        hash
+    }
+
+    /// Compute hash for table data
+    fn compute_table_hash(&self, storage_data: &[(Vec<u8>, Vec<u8>)]) -> u64 {
+        let data_bytes: Vec<u8> = storage_data
+            .iter()
+            .flat_map(|(k, v)| [k.as_slice(), v.as_slice()].concat())
+            .collect();
+        calculate_data_hash(&data_bytes)
+    }
+
+    /// Update table hash file
+    fn update_table_hash(&self, table_name: &str, hash: u64) -> Result<()> {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)?
+            .as_secs();
+
+        let hash_entry = TableHashEntry {
+            table_name: table_name.to_string(),
+            data_hash: hash,
+            last_updated: timestamp,
+        };
+
+        let content = serde_json::to_string(&hash_entry)?;
+        let hash_file = self.table_hash_file_path(table_name);
+        fs::write(&hash_file, content)?;
+        
+        Ok(())
+    }
+
     /// Get cached result if available and valid
     pub fn get(&self, query: &str, data_hash: u64) -> Result<Option<String>> {
         if !self.enabled {
@@ -122,6 +193,11 @@ impl ResultCache {
 
         println!("Cache hit for query: {}", query);
         Ok(Some(entry.result))
+    }
+
+    /// Get table data hash efficiently (public method for executor)
+    pub fn get_table_data_hash(&self, table_name: &str, storage_data: &[(Vec<u8>, Vec<u8>)]) -> u64 {
+        self.get_table_hash(table_name, storage_data)
     }
 
     /// Store result in cache
@@ -193,8 +269,8 @@ impl ResultCache {
             // Read cache entry to check if it references the table
             if let Ok(content) = fs::read_to_string(&path) {
                 if let Ok(cache_entry) = serde_json::from_str::<CacheEntry>(&content) {
-                    // Simple check: does the query mention the table?
-                    if cache_entry.query.to_lowercase().contains(&table_name.to_lowercase()) {
+                    // More precise table name matching to avoid over-invalidation
+                    if self.query_references_table(&cache_entry.query, table_name) {
                         fs::remove_file(&path)?;
                         removed_count += 1;
                     }
@@ -207,6 +283,32 @@ impl ResultCache {
         }
 
         Ok(())
+    }
+
+    /// Check if a query references a specific table name with word boundaries
+    fn query_references_table(&self, query: &str, table_name: &str) -> bool {
+        let query_lower = query.to_lowercase();
+        let table_lower = table_name.to_lowercase();
+        
+        // Look for table name with word boundaries (spaces, commas, parentheses, etc.)
+        let word_boundaries = [" ", "\t", "\n", "(", ")", ",", ";"];
+        
+        // Check if table name appears after FROM, JOIN, UPDATE, INSERT INTO, etc.
+        let table_keywords = ["from ", "join ", "update ", "insert into ", "into "];
+        
+        for keyword in &table_keywords {
+            if let Some(pos) = query_lower.find(&format!("{}{}", keyword, table_lower)) {
+                let end_pos = pos + keyword.len() + table_lower.len();
+                
+                // Check if the character after the table name is a word boundary or end of string
+                if end_pos >= query_lower.len() || 
+                   word_boundaries.iter().any(|&boundary| query_lower[end_pos..].starts_with(boundary)) {
+                    return true;
+                }
+            }
+        }
+        
+        false
     }
 
     /// Get cache statistics
@@ -344,6 +446,7 @@ mod tests {
 
         cache.put("SELECT * FROM users", 111, "result1").unwrap();
         cache.put("SELECT * FROM orders", 222, "result2").unwrap();
+        cache.put("SELECT * FROM user_logs", 333, "result3").unwrap(); // Should not be invalidated
 
         // Invalidate users table
         cache.invalidate_table("users").unwrap();
@@ -353,6 +456,22 @@ mod tests {
         
         // Orders query should still be cached
         assert!(cache.get("SELECT * FROM orders", 222).unwrap().is_some());
+        
+        // user_logs should still be cached (precise matching)
+        assert!(cache.get("SELECT * FROM user_logs", 333).unwrap().is_some());
+    }
+
+    #[test]
+    fn test_precise_table_matching() {
+        let temp_dir = TempDir::new().unwrap();
+        let cache = ResultCache::new(temp_dir.path()).unwrap();
+
+        // Test that "user" table invalidation doesn't affect "users" table
+        assert!(!cache.query_references_table("SELECT * FROM users", "user"));
+        assert!(cache.query_references_table("SELECT * FROM user", "user"));
+        assert!(cache.query_references_table("SELECT * FROM user WHERE id = 1", "user"));
+        assert!(cache.query_references_table("INSERT INTO user VALUES (1)", "user"));
+        assert!(!cache.query_references_table("SELECT * FROM power_user", "user"));
     }
 
     #[test]

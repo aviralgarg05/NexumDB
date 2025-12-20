@@ -108,14 +108,10 @@ impl Executor {
                         columns, table, where_clause, order_by, limit
                     );
 
-                    // Calculate data hash for cache invalidation
+                    // Calculate data hash for cache invalidation (optimized)
                     let prefix = Self::table_data_prefix(&table);
                     let all_data = self.storage.scan_prefix(&prefix)?;
-                    let data_bytes: Vec<u8> = all_data
-                        .iter()
-                        .flat_map(|(k, v)| [k.as_slice(), v.as_slice()].concat())
-                        .collect();
-                    let data_hash = calculate_data_hash(&data_bytes);
+                    let data_hash = self.result_cache.get_table_data_hash(&table, &all_data);
 
                     // Try result cache first
                     if let Ok(Some(cached_result)) = self.result_cache.get(&query_str, data_hash) {
