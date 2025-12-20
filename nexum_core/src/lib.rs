@@ -1,6 +1,9 @@
 /// Module providing natural-language translation and Python integration.
 pub mod bridge;
 
+/// Module providing result caching for unchanged scenarios.
+pub mod cache;
+
 /// Module managing the database catalog and metadata.
 pub mod catalog;
 
@@ -15,6 +18,9 @@ pub mod storage;
 
 /// Re-exports for natural language translator, Python bridge, and semantic cache.
 pub use bridge::{NLTranslator, PythonBridge, SemanticCache};
+
+/// Re-exports for result caching functionality.
+pub use cache::{ResultCache, CacheStats};
 
 /// Re-export of the main Catalog used by Nexum.
 pub use catalog::Catalog;

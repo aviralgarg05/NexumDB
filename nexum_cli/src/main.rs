@@ -1,12 +1,27 @@
 use nexum_core::{Catalog, Executor, NLTranslator, Parser, StorageEngine};
+use std::env;
 use std::io::{self, Write};
 
 fn main() -> anyhow::Result<()> {
     println!("NexumDB v0.2.0 - AI-Native Database with Natural Language Support");
     println!("Initializing...\n");
 
+    // Parse command line arguments
+    let args: Vec<String> = env::args().collect();
+    let no_cache = args.iter().any(|arg| arg == "--no-cache");
+
+    if no_cache {
+        println!("Result caching disabled (--no-cache flag)");
+    }
+
     let storage = StorageEngine::new("./nexumdb_data")?;
-    let executor = Executor::new(storage.clone()).with_cache();
+    
+    let executor = if no_cache {
+        Executor::new_with_cache_disabled(storage.clone()).with_cache()
+    } else {
+        Executor::new(storage.clone()).with_cache()
+    };
+    
     let catalog = Catalog::new(storage);
 
     let nl_translator = match NLTranslator::new() {
@@ -23,7 +38,12 @@ fn main() -> anyhow::Result<()> {
     println!("Ready. Commands:");
     println!("  - SQL: Type any SQL query (CREATE TABLE, INSERT, SELECT)");
     println!("  - ASK: Type 'ASK <question>' for natural language queries");
-    println!("  - EXIT: Type 'exit' or 'quit' to exit\n");
+    println!("  - CACHE: Type 'CACHE STATS' or 'CACHE CLEAR' to manage cache");
+    println!("  - EXIT: Type 'exit' or 'quit' to exit");
+    if !no_cache {
+        println!("  - Use --no-cache flag to disable result caching");
+    }
+    println!();
 
     loop {
         print!("nexumdb> ");
@@ -41,6 +61,40 @@ fn main() -> anyhow::Result<()> {
         if input.eq_ignore_ascii_case("exit") || input.eq_ignore_ascii_case("quit") {
             println!("Goodbye!");
             break;
+        }
+
+        // Handle cache commands
+        if input.to_uppercase().starts_with("CACHE ") {
+            let cache_cmd = input[6..].trim().to_uppercase();
+            
+            match cache_cmd.as_str() {
+                "STATS" => {
+                    match executor.cache_stats() {
+                        Ok(stats) => {
+                            println!("Cache Statistics:");
+                            println!("  Total entries: {}", stats.total_entries);
+                            println!("  Total size: {} bytes", stats.total_size_bytes);
+                            if let Some(oldest) = stats.oldest_entry_timestamp {
+                                println!("  Oldest entry: {} (unix timestamp)", oldest);
+                            }
+                            if let Some(newest) = stats.newest_entry_timestamp {
+                                println!("  Newest entry: {} (unix timestamp)", newest);
+                            }
+                        }
+                        Err(e) => eprintln!("Error getting cache stats: {}", e),
+                    }
+                }
+                "CLEAR" => {
+                    match executor.clear_cache() {
+                        Ok(_) => println!("Cache cleared successfully"),
+                        Err(e) => eprintln!("Error clearing cache: {}", e),
+                    }
+                }
+                _ => {
+                    eprintln!("Unknown cache command. Use 'CACHE STATS' or 'CACHE CLEAR'");
+                }
+            }
+            continue;
         }
 
         if input.to_uppercase().starts_with("ASK ") {

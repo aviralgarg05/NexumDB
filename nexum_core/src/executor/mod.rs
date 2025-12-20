@@ -1,4 +1,5 @@
 use crate::bridge::SemanticCache;
+use crate::cache::{ResultCache, calculate_data_hash};
 use crate::catalog::Catalog;
 use crate::sql::types::{Statement, Value};
 use crate::storage::{Result, StorageEngine, StorageError};
@@ -17,15 +18,32 @@ pub struct Executor {
     storage: StorageEngine,
     catalog: Catalog,
     cache: Option<SemanticCache>,
+    result_cache: ResultCache,
 }
 
 impl Executor {
     pub fn new(storage: StorageEngine) -> Self {
         let catalog = Catalog::new(storage.clone());
+        let result_cache = ResultCache::new(".nexum/cache").unwrap_or_else(|e| {
+            println!("Warning: Could not initialize result cache: {}", e);
+            ResultCache::disabled()
+        });
+        
         Self {
             storage,
             catalog,
             cache: None,
+            result_cache,
+        }
+    }
+
+    pub fn new_with_cache_disabled(storage: StorageEngine) -> Self {
+        let catalog = Catalog::new(storage.clone());
+        Self {
+            storage,
+            catalog,
+            cache: None,
+            result_cache: ResultCache::disabled(),
         }
     }
 
@@ -69,6 +87,9 @@ impl Executor {
                         self.storage.set(&key, &value)?;
                     }
 
+                    // Invalidate caches for this table since data changed
+                    let _ = self.result_cache.invalidate_table(&table);
+
                     Ok(ExecutionResult::Inserted {
                         table,
                         rows: values.len(),
@@ -81,11 +102,35 @@ impl Executor {
                     order_by,
                     limit,
                 } => {
-                    if let Some(cache) = &self.cache {
-                        let query_str = format!("SELECT {:?} FROM {}", columns, table);
+                    // Generate query string for caching
+                    let query_str = format!(
+                        "SELECT {:?} FROM {} WHERE {:?} ORDER BY {:?} LIMIT {:?}",
+                        columns, table, where_clause, order_by, limit
+                    );
 
-                        if let Ok(Some(cached_result)) = cache.get(&query_str) {
-                            println!("Cache hit for query: {}", query_str);
+                    // Calculate data hash for cache invalidation
+                    let prefix = Self::table_data_prefix(&table);
+                    let all_data = self.storage.scan_prefix(&prefix)?;
+                    let data_bytes: Vec<u8> = all_data
+                        .iter()
+                        .flat_map(|(k, v)| [k.as_slice(), v.as_slice()].concat())
+                        .collect();
+                    let data_hash = calculate_data_hash(&data_bytes);
+
+                    // Try result cache first
+                    if let Ok(Some(cached_result)) = self.result_cache.get(&query_str, data_hash) {
+                        println!("Result cache hit for query: {}", query_str);
+                        let rows: Vec<Row> = serde_json::from_str(&cached_result)
+                            .unwrap_or_else(|_| Vec::new());
+                        return Ok(ExecutionResult::Selected { columns, rows });
+                    }
+
+                    // Fall back to semantic cache
+                    if let Some(cache) = &self.cache {
+                        let simple_query_str = format!("SELECT {:?} FROM {}", columns, table);
+
+                        if let Ok(Some(cached_result)) = cache.get(&simple_query_str) {
+                            println!("Semantic cache hit for query: {}", simple_query_str);
                             let rows: Vec<Row> =
                                 serde_json::from_str(&cached_result).unwrap_or_else(|_| Vec::new());
                             return Ok(ExecutionResult::Selected { columns, rows });
@@ -96,7 +141,6 @@ impl Executor {
                         StorageError::ReadError(format!("Table {} not found", table))
                     })?;
 
-                    let prefix = Self::table_data_prefix(&table);
                     let all_rows = self.storage.scan_prefix(&prefix)?;
 
                     let mut rows: Vec<Row> = all_rows
@@ -154,10 +198,14 @@ impl Executor {
                         println!("Limited to {} rows using LIMIT", limit_count);
                     }
 
+                    // Cache the result
+                    let result_json = serde_json::to_string(&rows).unwrap_or_default();
+                    let _ = self.result_cache.put(&query_str, data_hash, &result_json);
+
+                    // Also cache in semantic cache for backward compatibility
                     if let Some(cache) = &self.cache {
-                        let query_str = format!("SELECT {:?} FROM {}", columns, table);
-                        let cached_data = serde_json::to_string(&rows).unwrap_or_default();
-                        let _ = cache.put(&query_str, &cached_data);
+                        let simple_query_str = format!("SELECT {:?} FROM {}", columns, table);
+                        let _ = cache.put(&simple_query_str, &result_json);
                     }
 
                     Ok(ExecutionResult::Selected { columns, rows })
@@ -184,6 +232,21 @@ impl Executor {
 
     fn table_data_prefix(table: &str) -> Vec<u8> {
         format!("data:{}:", table).into_bytes()
+    }
+
+    /// Clear all result caches
+    pub fn clear_cache(&self) -> Result<()> {
+        self.result_cache.clear().map_err(|e| StorageError::WriteError(e.to_string()))
+    }
+
+    /// Get cache statistics
+    pub fn cache_stats(&self) -> Result<crate::cache::CacheStats> {
+        self.result_cache.stats().map_err(|e| StorageError::ReadError(e.to_string()))
+    }
+
+    /// Check if result caching is enabled
+    pub fn is_result_cache_enabled(&self) -> bool {
+        self.result_cache.is_enabled()
     }
 }
 
