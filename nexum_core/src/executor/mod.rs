@@ -88,7 +88,10 @@ impl Executor {
                     }
 
                     // Invalidate caches for this table since data changed
-                    let _ = self.result_cache.invalidate_table(&table);
+                    if let Err(e) = self.result_cache.invalidate_table(&table) {
+                        println!("Warning: Failed to invalidate cache for table {}: {}", table, e);
+                        // Continue execution - cache invalidation failure shouldn't block inserts
+                    }
 
                     Ok(ExecutionResult::Inserted {
                         table,
@@ -195,13 +198,30 @@ impl Executor {
                     }
 
                     // Cache the result
-                    let result_json = serde_json::to_string(&rows).unwrap_or_default();
-                    let _ = self.result_cache.put(&query_str, data_hash, &result_json);
+                    match serde_json::to_string(&rows) {
+                        Ok(result_json) => {
+                            if let Err(e) = self.result_cache.put(&query_str, data_hash, &result_json) {
+                                println!("Warning: Failed to cache query result: {}", e);
+                            }
+                        }
+                        Err(e) => {
+                            println!("Warning: Failed to serialize query result for caching: {}", e);
+                        }
+                    }
 
                     // Also cache in semantic cache for backward compatibility
                     if let Some(cache) = &self.cache {
                         let simple_query_str = format!("SELECT {:?} FROM {}", columns, table);
-                        let _ = cache.put(&simple_query_str, &result_json);
+                        match serde_json::to_string(&rows) {
+                            Ok(cached_data) => {
+                                if let Err(e) = cache.put(&simple_query_str, &cached_data) {
+                                    println!("Warning: Failed to cache in semantic cache: {}", e);
+                                }
+                            }
+                            Err(e) => {
+                                println!("Warning: Failed to serialize for semantic cache: {}", e);
+                            }
+                        }
                     }
 
                     Ok(ExecutionResult::Selected { columns, rows })

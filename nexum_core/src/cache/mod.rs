@@ -120,22 +120,18 @@ impl ResultCache {
         // Try to read existing hash
         if let Ok(content) = fs::read_to_string(&hash_file) {
             if let Ok(hash_entry) = serde_json::from_str::<TableHashEntry>(&content) {
-                // For now, we'll recompute the hash each time to ensure accuracy
-                // In a production system, we could optimize this further with timestamps
-                let current_hash = self.compute_table_hash(storage_data);
-                
-                // Update the hash file if it changed
-                if current_hash != hash_entry.data_hash {
-                    let _ = self.update_table_hash(table_name, current_hash);
-                }
-                
-                return current_hash;
+                // Trust the stored hash if it exists and is recent
+                // In a production system, we could add timestamp-based validation
+                // For now, we trust the stored hash to avoid recomputation
+                return hash_entry.data_hash;
             }
         }
         
-        // Compute and store new hash
+        // Compute and store new hash only if no valid stored hash exists
         let hash = self.compute_table_hash(storage_data);
-        let _ = self.update_table_hash(table_name, hash);
+        if let Err(e) = self.update_table_hash(table_name, hash) {
+            println!("Warning: Failed to update table hash for {}: {}", table_name, e);
+        }
         hash
     }
 
@@ -276,6 +272,12 @@ impl ResultCache {
                     }
                 }
             }
+        }
+
+        // Also invalidate the table hash file to force recomputation
+        let table_hash_file = self.table_hash_file_path(table_name);
+        if table_hash_file.exists() {
+            fs::remove_file(&table_hash_file)?;
         }
 
         if removed_count > 0 {
