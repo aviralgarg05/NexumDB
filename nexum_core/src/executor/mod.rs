@@ -236,6 +236,96 @@ impl Executor {
                     })
                 }
             }
+            Statement::Update {
+                table,
+                assignments,
+                where_clause,
+            } => {
+                let schema = self
+                    .catalog
+                    .get_table(&table)?
+                    .ok_or_else(|| StorageError::ReadError(format!("Table {} not found", table)))?;
+
+                let column_names: Vec<String> =
+                    schema.columns.iter().map(|c| c.name.clone()).collect();
+
+                // Build column index map for assignments
+                let mut assignment_indices: Vec<(usize, Value)> = Vec::new();
+                for (col_name, new_value) in &assignments {
+                    let col_idx = column_names
+                        .iter()
+                        .position(|c| c == col_name)
+                        .ok_or_else(|| {
+                            StorageError::ReadError(format!("Column {} not found in table {}", col_name, table))
+                        })?;
+
+                    // Type checking: verify the new value matches the column type
+                    let expected_type = &schema.columns[col_idx].data_type;
+                    let actual_type = new_value.data_type();
+                    if actual_type != crate::sql::types::DataType::Null && *expected_type != actual_type {
+                        return Err(StorageError::ReadError(format!(
+                            "Type mismatch for column '{}': expected {:?}, got {:?}",
+                            col_name, expected_type, actual_type
+                        )));
+                    }
+
+                    assignment_indices.push((col_idx, new_value.clone()));
+                }
+
+                let prefix = Self::table_data_prefix(&table);
+                let all_rows = self.storage.scan_prefix(&prefix)?;
+
+                // Two-phase update: collect updates first, then apply them atomically
+                let mut updates: Vec<(Vec<u8>, Row)> = Vec::new();
+
+                let evaluator = ExpressionEvaluator::new(column_names);
+
+                for (key, value) in &all_rows {
+                    if let Ok(mut row) = serde_json::from_slice::<Row>(value) {
+                        let should_update = if let Some(ref where_expr) = where_clause {
+                            match evaluator.evaluate(where_expr, &row.values) {
+                                Ok(result) => result,
+                                Err(e) => {
+                                    return Err(StorageError::ReadError(format!(
+                                        "WHERE clause evaluation failed: {}. No rows were updated.",
+                                        e
+                                    )));
+                                }
+                            }
+                        } else {
+                            true // No WHERE clause means update all rows
+                        };
+
+                        if should_update {
+                            // Apply assignments to the row
+                            for (col_idx, new_value) in &assignment_indices {
+                                row.values[*col_idx] = new_value.clone();
+                            }
+                            updates.push((key.clone(), row));
+                        }
+                    }
+                }
+
+                // Phase 2: Apply all updates atomically
+                let updated_count = updates.len();
+                for (key, row) in updates {
+                    let value = serde_json::to_vec(&row)?;
+                    self.storage.set(&key, &value)?;
+                }
+
+                if where_clause.is_none() && updated_count > 0 {
+                    log::warn!(
+                        "UPDATE without WHERE clause modified all {} rows in table '{}'",
+                        updated_count,
+                        table
+                    );
+                }
+
+                Ok(ExecutionResult::Updated {
+                    table,
+                    rows: updated_count,
+                })
+            }
         };
 
         let duration = start.elapsed();
@@ -315,6 +405,10 @@ pub enum ExecutionResult {
         rows: Vec<Row>,
     },
     Deleted {
+        table: String,
+        rows: usize,
+    },
+    Updated {
         table: String,
         rows: usize,
     },
@@ -510,6 +604,248 @@ mod tests {
         match result {
             ExecutionResult::Selected { rows, .. } => {
                 assert_eq!(rows.len(), 0);
+            }
+            _ => panic!("Expected Selected result"),
+        }
+    }
+
+    #[test]
+    fn test_update_with_where_clause() {
+        let storage = StorageEngine::memory().unwrap();
+        let executor = Executor::new(storage);
+
+        // Create table
+        let create = Statement::CreateTable {
+            name: "test_update".to_string(),
+            columns: vec![
+                Column {
+                    name: "id".to_string(),
+                    data_type: DataType::Integer,
+                },
+                Column {
+                    name: "name".to_string(),
+                    data_type: DataType::Text,
+                },
+            ],
+        };
+        executor.execute(create).unwrap();
+
+        // Insert rows
+        let insert = Statement::Insert {
+            table: "test_update".to_string(),
+            columns: vec!["id".to_string(), "name".to_string()],
+            values: vec![
+                vec![Value::Integer(1), Value::Text("Alice".to_string())],
+                vec![Value::Integer(2), Value::Text("Bob".to_string())],
+                vec![Value::Integer(3), Value::Text("Charlie".to_string())],
+            ],
+        };
+        executor.execute(insert).unwrap();
+
+        // Parse WHERE clause for UPDATE
+        use sqlparser::dialect::GenericDialect;
+        use sqlparser::parser::Parser as SqlParser;
+        let dialect = GenericDialect {};
+        let ast = SqlParser::parse_sql(&dialect, "SELECT * FROM t WHERE id = 2").unwrap();
+        let where_expr = if let sqlparser::ast::Statement::Query(query) = &ast[0] {
+            if let sqlparser::ast::SetExpr::Select(select) = &*query.body {
+                select.selection.clone().map(Box::new)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // Update with WHERE clause
+        let update = Statement::Update {
+            table: "test_update".to_string(),
+            assignments: vec![("name".to_string(), Value::Text("Bobby".to_string()))],
+            where_clause: where_expr,
+        };
+
+        let result = executor.execute(update).unwrap();
+        match result {
+            ExecutionResult::Updated { table, rows } => {
+                assert_eq!(table, "test_update");
+                assert_eq!(rows, 1);
+            }
+            _ => panic!("Expected Updated result"),
+        }
+
+        // Verify the update
+        let select = Statement::Select {
+            table: "test_update".to_string(),
+            columns: vec!["*".to_string()],
+            where_clause: None,
+            order_by: None,
+            limit: None,
+        };
+        let result = executor.execute(select).unwrap();
+        match result {
+            ExecutionResult::Selected { rows, .. } => {
+                assert_eq!(rows.len(), 3);
+                // Find the updated row
+                let updated_row = rows.iter().find(|r| {
+                    if let Value::Integer(id) = &r.values[0] {
+                        *id == 2
+                    } else {
+                        false
+                    }
+                });
+                assert!(updated_row.is_some());
+                if let Value::Text(name) = &updated_row.unwrap().values[1] {
+                    assert_eq!(name, "Bobby");
+                } else {
+                    panic!("Expected Text value for name");
+                }
+            }
+            _ => panic!("Expected Selected result"),
+        }
+    }
+
+    #[test]
+    fn test_update_multiple_columns() {
+        let storage = StorageEngine::memory().unwrap();
+        let executor = Executor::new(storage);
+
+        // Create table
+        let create = Statement::CreateTable {
+            name: "test_update_multi".to_string(),
+            columns: vec![
+                Column {
+                    name: "id".to_string(),
+                    data_type: DataType::Integer,
+                },
+                Column {
+                    name: "name".to_string(),
+                    data_type: DataType::Text,
+                },
+                Column {
+                    name: "age".to_string(),
+                    data_type: DataType::Integer,
+                },
+            ],
+        };
+        executor.execute(create).unwrap();
+
+        // Insert a row
+        let insert = Statement::Insert {
+            table: "test_update_multi".to_string(),
+            columns: vec!["id".to_string(), "name".to_string(), "age".to_string()],
+            values: vec![vec![
+                Value::Integer(1),
+                Value::Text("Alice".to_string()),
+                Value::Integer(25),
+            ]],
+        };
+        executor.execute(insert).unwrap();
+
+        // Update multiple columns
+        let update = Statement::Update {
+            table: "test_update_multi".to_string(),
+            assignments: vec![
+                ("name".to_string(), Value::Text("Alicia".to_string())),
+                ("age".to_string(), Value::Integer(26)),
+            ],
+            where_clause: None,
+        };
+
+        let result = executor.execute(update).unwrap();
+        match result {
+            ExecutionResult::Updated { rows, .. } => {
+                assert_eq!(rows, 1);
+            }
+            _ => panic!("Expected Updated result"),
+        }
+
+        // Verify the update
+        let select = Statement::Select {
+            table: "test_update_multi".to_string(),
+            columns: vec!["*".to_string()],
+            where_clause: None,
+            order_by: None,
+            limit: None,
+        };
+        let result = executor.execute(select).unwrap();
+        match result {
+            ExecutionResult::Selected { rows, .. } => {
+                assert_eq!(rows.len(), 1);
+                let row = &rows[0];
+                if let Value::Text(name) = &row.values[1] {
+                    assert_eq!(name, "Alicia");
+                }
+                if let Value::Integer(age) = &row.values[2] {
+                    assert_eq!(*age, 26);
+                }
+            }
+            _ => panic!("Expected Selected result"),
+        }
+    }
+
+    #[test]
+    fn test_update_all_rows() {
+        let storage = StorageEngine::memory().unwrap();
+        let executor = Executor::new(storage);
+
+        // Create table
+        let create = Statement::CreateTable {
+            name: "test_update_all".to_string(),
+            columns: vec![
+                Column {
+                    name: "id".to_string(),
+                    data_type: DataType::Integer,
+                },
+                Column {
+                    name: "status".to_string(),
+                    data_type: DataType::Text,
+                },
+            ],
+        };
+        executor.execute(create).unwrap();
+
+        // Insert rows
+        let insert = Statement::Insert {
+            table: "test_update_all".to_string(),
+            columns: vec!["id".to_string(), "status".to_string()],
+            values: vec![
+                vec![Value::Integer(1), Value::Text("pending".to_string())],
+                vec![Value::Integer(2), Value::Text("pending".to_string())],
+            ],
+        };
+        executor.execute(insert).unwrap();
+
+        // Update all rows (no WHERE clause)
+        let update = Statement::Update {
+            table: "test_update_all".to_string(),
+            assignments: vec![("status".to_string(), Value::Text("completed".to_string()))],
+            where_clause: None,
+        };
+
+        let result = executor.execute(update).unwrap();
+        match result {
+            ExecutionResult::Updated { rows, .. } => {
+                assert_eq!(rows, 2);
+            }
+            _ => panic!("Expected Updated result"),
+        }
+
+        // Verify all rows updated
+        let select = Statement::Select {
+            table: "test_update_all".to_string(),
+            columns: vec!["*".to_string()],
+            where_clause: None,
+            order_by: None,
+            limit: None,
+        };
+        let result = executor.execute(select).unwrap();
+        match result {
+            ExecutionResult::Selected { rows, .. } => {
+                for row in rows {
+                    if let Value::Text(status) = &row.values[1] {
+                        assert_eq!(status, "completed");
+                    }
+                }
             }
             _ => panic!("Expected Selected result"),
         }

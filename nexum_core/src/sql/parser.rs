@@ -77,6 +77,31 @@ impl Parser {
                     where_clause,
                 })
             }
+            SqlStatement::Update {
+                table,
+                assignments,
+                selection,
+                ..
+            } => {
+                let table_name = table.to_string();
+
+                let assignment_pairs = assignments
+                    .iter()
+                    .map(|assign| {
+                        let col_name = assign.id.iter().map(|i| i.value.clone()).collect::<Vec<_>>().join(".");
+                        let value = Self::convert_expr(&assign.value)?;
+                        Ok((col_name, value))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+
+                let where_clause = selection.as_ref().map(|expr| Box::new(expr.clone()));
+
+                Ok(Statement::Update {
+                    table: table_name,
+                    assignments: assignment_pairs,
+                    where_clause,
+                })
+            }
             SqlStatement::Query(query) => {
                 if let ast::SetExpr::Select(select) = &*query.body {
                     let table =
@@ -265,6 +290,66 @@ mod tests {
                 assert!(where_clause.is_none());
             }
             _ => panic!("Expected Delete statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_update_single_column() {
+        let sql = "UPDATE users SET name = 'Bob' WHERE id = 1";
+        let stmt = Parser::parse(sql).unwrap();
+
+        match stmt {
+            Statement::Update {
+                table,
+                assignments,
+                where_clause,
+            } => {
+                assert_eq!(table, "users");
+                assert_eq!(assignments.len(), 1);
+                assert_eq!(assignments[0].0, "name");
+                assert!(where_clause.is_some());
+            }
+            _ => panic!("Expected Update statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_update_multiple_columns() {
+        let sql = "UPDATE users SET name = 'Bob', age = 30 WHERE id = 1";
+        let stmt = Parser::parse(sql).unwrap();
+
+        match stmt {
+            Statement::Update {
+                table,
+                assignments,
+                where_clause,
+            } => {
+                assert_eq!(table, "users");
+                assert_eq!(assignments.len(), 2);
+                assert_eq!(assignments[0].0, "name");
+                assert_eq!(assignments[1].0, "age");
+                assert!(where_clause.is_some());
+            }
+            _ => panic!("Expected Update statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_update_without_where() {
+        let sql = "UPDATE users SET active = true";
+        let stmt = Parser::parse(sql).unwrap();
+
+        match stmt {
+            Statement::Update {
+                table,
+                assignments,
+                where_clause,
+            } => {
+                assert_eq!(table, "users");
+                assert_eq!(assignments.len(), 1);
+                assert!(where_clause.is_none());
+            }
+            _ => panic!("Expected Update statement"),
         }
     }
 }

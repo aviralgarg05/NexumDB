@@ -71,4 +71,9 @@ pub enum Statement {
         table: String,
         where_clause: Option<Box<Expr>>,
     },
+    Update {
+        table: String,
+        assignments: Vec<(String, Value)>,
+        where_clause: Option<Box<Expr>>,
+    },
 }
