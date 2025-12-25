@@ -23,7 +23,7 @@ impl Catalog {
         let key = Self::table_key(name);
 
         if self.storage.get(&key)?.is_some() {
-            return Err(StorageError::WriteError(format!(
+            return Err(StorageError::LogicalWrite(format!(
                 "Table {} already exists",
                 name
             )));

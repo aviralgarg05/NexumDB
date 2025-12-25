@@ -8,7 +8,7 @@ pub struct StorageEngine {
 
 impl StorageEngine {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let db = sled::open(path).map_err(|e| StorageError::OpenError(e.to_string()))?;
+        let db = sled::open(path).map_err(|e| StorageError::Open{source:e})?;
         Ok(Self { db })
     }
 
@@ -16,7 +16,7 @@ impl StorageEngine {
         let config = sled::Config::new().temporary(true);
         let db = config
             .open()
-            .map_err(|e| StorageError::OpenError(e.to_string()))?;
+            .map_err(|e| StorageError::Open{source: e})?;
         Ok(Self { db })
     }
 

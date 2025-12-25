@@ -50,20 +50,21 @@ impl Executor {
     pub fn execute(&self, statement: Statement) -> Result<ExecutionResult> {
         let start = Instant::now();
 
-        let result = match statement {
-            Statement::CreateTable { name, columns } => {
-                self.catalog.create_table(&name, columns)?;
-                Ok(ExecutionResult::Created { table: name })
-            }
-            Statement::Insert {
-                table,
-                columns: _,
-                values,
-            } => {
-                let _schema = self
-                    .catalog
-                    .get_table(&table)?
-                    .ok_or_else(|| StorageError::ReadError(format!("Table {} not found", table)))?;
+
+        let result =
+            match statement {
+                Statement::CreateTable { name, columns } => {
+                    self.catalog.create_table(&name, columns)?;
+                    Ok(ExecutionResult::Created { table: name })
+                }
+                Statement::Insert {
+                    table,
+                    columns: _,
+                    values,
+                } => {
+                    let _schema = self.catalog.get_table(&table)?.ok_or_else(|| {
+                        StorageError::KeyNotFound{key: table.clone(),}
+                    })?;
 
                 for row_values in &values {
                     let row = Row {
@@ -151,9 +152,9 @@ impl Executor {
                             });
                         }
                     }
-
                     log::debug!("Sorted {} rows using ORDER BY", rows.len());
                 }
+
 
                 if let Some(limit_count) = limit {
                     rows.truncate(limit_count);
@@ -264,7 +265,7 @@ impl Executor {
         if let Some(cache) = &self.cache {
             cache
                 .save_cache()
-                .map_err(|e| StorageError::WriteError(e.to_string()))?;
+                .map_err(|e| StorageError::CacheWrite{source: e})?;
             println!("Semantic cache saved to disk");
         } else {
             println!("No semantic cache to save");
@@ -276,7 +277,7 @@ impl Executor {
         if let Some(cache) = &self.cache {
             cache
                 .clear_cache()
-                .map_err(|e| StorageError::WriteError(e.to_string()))?;
+                .map_err(|e| StorageError::CacheWrite{source: e})?;
             println!("Semantic cache cleared");
         } else {
             println!("No semantic cache to clear");
@@ -288,7 +289,8 @@ impl Executor {
         if let Some(cache) = &self.cache {
             cache
                 .get_cache_stats()
-                .map_err(|e| StorageError::ReadError(e.to_string()))
+                .map_err(|e| StorageError::CacheRead {source: e})
+            
         } else {
             Ok("No semantic cache enabled".to_string())
         }
