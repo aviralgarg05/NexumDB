@@ -68,13 +68,17 @@ pub struct SemanticCache {
 
 impl SemanticCache {
     pub fn new() -> Result<Self> {
+        Self::with_cache_file("semantic_cache.pkl")
+    }
+
+    pub fn with_cache_file(cache_file: &str) -> Result<Self> {
         let mut bridge = PythonBridge::new()?;
         bridge.initialize()?;
 
         let cache = Python::with_gil(|py| {
             let nexum_ai = PyModule::import(py, "nexum_ai.optimizer")?;
             let semantic_cache_class = nexum_ai.getattr("SemanticCache")?;
-            let cache_instance = semantic_cache_class.call0()?;
+            let cache_instance = semantic_cache_class.call1((0.95, cache_file))?;
             Ok::<PyObject, PyErr>(cache_instance.unbind())
         })?;
 
@@ -108,6 +112,53 @@ impl SemanticCache {
     pub fn vectorize(&self, text: &str) -> Result<Vec<f32>> {
         self.bridge.vectorize(text)
     }
+
+    pub fn save_cache(&self) -> Result<()> {
+        Python::with_gil(|py| {
+            let cache_bound = self.cache.bind(py);
+            cache_bound.call_method0("save_cache")?;
+            Ok::<(), PyErr>(())
+        })
+        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
+    }
+
+    pub fn load_cache(&self) -> Result<()> {
+        Python::with_gil(|py| {
+            let cache_bound = self.cache.bind(py);
+            cache_bound.call_method0("load_cache")?;
+            Ok::<(), PyErr>(())
+        })
+        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
+    }
+
+    pub fn clear_cache(&self) -> Result<()> {
+        Python::with_gil(|py| {
+            let cache_bound = self.cache.bind(py);
+            cache_bound.call_method0("clear")?;
+            Ok::<(), PyErr>(())
+        })
+        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
+    }
+
+    pub fn get_cache_stats(&self) -> Result<String> {
+        Python::with_gil(|py| {
+            let cache_bound = self.cache.bind(py);
+            let result = cache_bound.call_method0("get_cache_stats")?;
+            let stats_str: String = result.str()?.extract()?;
+            Ok(stats_str)
+        })
+        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
+    }
+
+    pub fn explain_query(&self, query: &str) -> Result<String> {
+        Python::with_gil(|py| {
+            let cache_bound = self.cache.bind(py);
+            let result = cache_bound.call_method1("explain_query", (query,))?;
+            let explain_str: String = result.str()?.extract()?;
+            Ok(explain_str)
+        })
+        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
+    }
 }
 
 pub struct NLTranslator {
@@ -140,6 +191,44 @@ impl NLTranslator {
 
             let sql: String = result.extract()?;
             Ok(sql)
+        })
+        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
+    }
+}
+
+pub struct QueryExplainer {
+    _bridge: PythonBridge,
+}
+
+impl QueryExplainer {
+    pub fn new() -> Result<Self> {
+        let mut bridge = PythonBridge::new()?;
+        bridge.initialize()?;
+        Ok(Self { _bridge: bridge })
+    }
+
+    pub fn explain(&self, query: &str) -> Result<String> {
+        Python::with_gil(|py| {
+            let nexum_ai = PyModule::import(py, "nexum_ai.optimizer")?;
+            let explain_func = nexum_ai.getattr("explain_query_plan")?;
+            let format_func = nexum_ai.getattr("format_explain_output")?;
+
+            let result = explain_func.call1((query,))?;
+            let formatted = format_func.call1((result,))?;
+            let output: String = formatted.extract()?;
+            Ok(output)
+        })
+        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
+    }
+
+    pub fn explain_raw(&self, query: &str) -> Result<String> {
+        Python::with_gil(|py| {
+            let nexum_ai = PyModule::import(py, "nexum_ai.optimizer")?;
+            let explain_func = nexum_ai.getattr("explain_query_plan")?;
+
+            let result = explain_func.call1((query,))?;
+            let output: String = result.str()?.extract()?;
+            Ok(output)
         })
         .map_err(|e: PyErr| anyhow!("Python error: {}", e))
     }
@@ -180,22 +269,40 @@ mod tests {
     }
 
     #[test]
-    fn test_semantic_cache() {
+    fn test_semantic_cache_persistence() {
         if !check_python_available() {
             println!("Skipping test: Python environment not available");
             return;
         }
 
-        let cache = SemanticCache::new().unwrap();
+        let cache = SemanticCache::with_cache_file("test_rust_cache.pkl").unwrap();
 
-        let query = "SELECT * FROM users";
-        let result = "User data results";
+        let query = "SELECT * FROM users WHERE name = 'test'";
+        let result = "Test user data";
 
+        // Put data in cache
         cache.put(query, result).unwrap();
 
+        // Verify cache hit
         let cached = cache.get(query).unwrap();
         assert!(cached.is_some());
         assert_eq!(cached.unwrap(), result);
+
+        // Test cache stats
+        let stats = cache.get_cache_stats().unwrap();
+        println!("Cache stats: {}", stats);
+
+        // Test save/load cycle
+        cache.save_cache().unwrap();
+
+        // Create new cache instance and verify persistence
+        let cache2 = SemanticCache::with_cache_file("test_rust_cache.pkl").unwrap();
+        let cached2 = cache2.get(query).unwrap();
+        assert!(cached2.is_some());
+        assert_eq!(cached2.unwrap(), result);
+
+        // Cleanup
+        cache2.clear_cache().unwrap();
     }
 
     #[test]
@@ -215,5 +322,25 @@ mod tests {
         println!("Translated: {} -> {}", nl_query, sql);
         assert!(sql.contains("SELECT"));
         assert!(sql.contains("users"));
+    }
+
+    #[test]
+    fn test_query_explainer() {
+        if !check_python_available() {
+            println!("Skipping test: Python environment not available");
+            return;
+        }
+
+        let explainer = super::QueryExplainer::new().unwrap();
+        let query = "SELECT * FROM users WHERE age > 25";
+
+        let plan = explainer.explain(query).unwrap();
+
+        println!("Explain output:\n{}", plan);
+        assert!(plan.contains("QUERY EXECUTION PLAN"));
+        assert!(plan.contains("PARSING"));
+        assert!(plan.contains("CACHE LOOKUP"));
+        assert!(plan.contains("RL AGENT"));
+        assert!(plan.contains("EXECUTION STRATEGY"));
     }
 }

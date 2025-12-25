@@ -13,8 +13,8 @@ pub mod sql;
 /// Module handling data storage and low-level engine components.
 pub mod storage;
 
-/// Re-exports for natural language translator, Python bridge, and semantic cache.
-pub use bridge::{NLTranslator, PythonBridge, SemanticCache};
+/// Re-exports for natural language translator, Python bridge, semantic cache, and query explainer.
+pub use bridge::{NLTranslator, PythonBridge, QueryExplainer, SemanticCache};
 
 /// Re-export of the main Catalog used by Nexum.
 pub use catalog::Catalog;

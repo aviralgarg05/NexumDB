@@ -15,3 +15,20 @@ regex = "1.10"
 
 [dev-dependencies]
 tempfile = "3.8"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "storage_bench"
+harness = false
+
+[[bench]]
+name = "sql_bench"
+harness = false
+
+[[bench]]
+name = "executor_bench"
+harness = false
+
+[[bench]]
+name = "filter_bench"
+harness = false
