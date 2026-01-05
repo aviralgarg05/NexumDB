@@ -8,6 +8,8 @@ pub enum StorageErrorCode {
     WriteFailed,
     KeyNotFound,
     SerializationFailed,
+    CacheWriteFailed,
+    CacheReadFailed,
 }
 #[derive(Error, Debug)]
 pub enum StorageError {
