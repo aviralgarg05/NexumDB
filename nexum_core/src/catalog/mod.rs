@@ -23,10 +23,9 @@ impl Catalog {
         let key = Self::table_key(name);
 
         if self.storage.get(&key)?.is_some() {
-            return Err(StorageError::LogicalWrite(format!(
-                "Table {} already exists",
-                name
-            )));
+            return Err(StorageError::LogicalWrite {
+                message: format!("Table {} already exists", name),
+            });
         }
 
         let cols: Vec<(String, String)> = columns

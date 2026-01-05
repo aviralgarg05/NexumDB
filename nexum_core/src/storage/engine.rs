@@ -8,7 +8,7 @@ pub struct StorageEngine {
 
 impl StorageEngine {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let db = sled::open(path).map_err(|e| StorageError::Open{source:e})?;
+        let db = sled::open(path).map_err(|e| StorageError::Open { source: e })?;
         Ok(Self { db })
     }
 
@@ -16,39 +16,51 @@ impl StorageEngine {
         let config = sled::Config::new().temporary(true);
         let db = config
             .open()
-            .map_err(|e| StorageError::Open{source: e})?;
+            .map_err(|e| StorageError::Open { source: e })?;
         Ok(Self { db })
     }
 
     pub fn set(&self, key: &[u8], value: &[u8]) -> Result<()> {
-        self.db.insert(key, value)?;
-        self.db.flush()?;
+        self.db
+            .insert(key, value)
+            .map_err(|e| StorageError::Write { source: e })?;
+        self.db
+            .flush()
+            .map_err(|e| StorageError::Write { source: e })?;
         Ok(())
     }
 
     pub fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        match self.db.get(key)? {
+        match self
+            .db
+            .get(key)
+            .map_err(|e| StorageError::Write { source: e })?
+        {
             Some(ivec) => Ok(Some(ivec.to_vec())),
             None => Ok(None),
         }
     }
 
     pub fn delete(&self, key: &[u8]) -> Result<()> {
-        self.db.remove(key)?;
+        self.db
+            .remove(key)
+            .map_err(|e| StorageError::Write { source: e })?;
         Ok(())
     }
 
     pub fn scan_prefix(&self, prefix: &[u8]) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
         let mut results = Vec::new();
         for item in self.db.scan_prefix(prefix) {
-            let (k, v) = item?;
+            let (k, v) = item.map_err(|e| StorageError::Write { source: e })?;
             results.push((k.to_vec(), v.to_vec()));
         }
         Ok(results)
     }
 
     pub fn flush(&self) -> Result<()> {
-        self.db.flush()?;
+        self.db
+            .flush()
+            .map_err(|e| StorageError::Write { source: e })?;
         Ok(())
     }
 }

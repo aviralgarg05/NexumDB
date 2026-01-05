@@ -18,68 +18,66 @@ pub enum StorageError {
     },
 
     #[error("failed to write to database")]
-    Write{
+    Write {
         #[source]
         source: sled::Error,
     },
 
     #[error("failed to read from database")]
-    Read{
+    Read {
         #[source]
         source: sled::Error,
     },
 
     #[error("semantic cache write failed")]
-    CacheWrite{
+    CacheWrite {
         #[source]
         source: anyhow::Error,
     },
 
     #[error("semantic cache read failed")]
-    CacheRead{
+    CacheRead {
         #[source]
         source: anyhow::Error,
     },
 
     #[error("Key not found: {key}")]
-    KeyNotFound{
-        key: String,
-    },
+    KeyNotFound { key: String },
 
     #[error("Serialization error")]
-    Serialization{
+    Serialization {
         #[source]
         source: serde_json::Error,
     },
     // new variant for application-level logical write errors
-    #[error("logical write error: {0}")]
-    LogicalWrite(String),
+    #[error("logical write error: {message}")]
+    LogicalWrite { message: String },
 }
 
 impl StorageError {
     /// Machine-readable error codes
     pub fn code(&self) -> StorageErrorCode {
         match self {
-            StorageError:: Open{..} => StorageErrorCode::OpenFailed,
-            StorageError:: Write {..} => StorageErrorCode::WriteFailed,
-            StorageError::Read{..}=> StorageErrorCode::ReadFailed,
-            StorageError::KeyNotFound{..}=> StorageErrorCode::KeyNotFound,
-            StorageError::Serialization{..}=> StorageErrorCode::SerializationFailed,
-            StorageError::CacheWrite{..}=> StorageErrorCode::WriteFailed,
-            StorageError::CacheRead{..}=> StorageErrorCode::ReadFailed,
-            StorageError::LogicalWrite(_)=> StorageErrorCode::WriteFailed,
+            StorageError::Open { .. } => StorageErrorCode::OpenFailed,
+            StorageError::Write { .. } => StorageErrorCode::WriteFailed,
+            StorageError::Read { .. } => StorageErrorCode::ReadFailed,
+            StorageError::KeyNotFound { .. } => StorageErrorCode::KeyNotFound,
+            StorageError::Serialization { .. } => StorageErrorCode::SerializationFailed,
+            StorageError::CacheWrite { .. } => StorageErrorCode::WriteFailed,
+            StorageError::CacheRead { .. } => StorageErrorCode::ReadFailed,
+            StorageError::LogicalWrite { .. } => StorageErrorCode::WriteFailed,
         }
     }
 }
-//implement From conversions for error propagation
-impl From<sled::Error> for StorageError {
-    fn from(err: sled::Error) -> Self {
-        StorageError::Write{source: err}
-        }
-    }
+// //implement From conversions for error propagation
+// impl From<sled::Error> for StorageError {
+//     fn from(err: sled::Error) -> Self {
+//         StorageError::Write{source: err}
+//         }
+//     }
 
 impl From<serde_json::Error> for StorageError {
     fn from(err: serde_json::Error) -> Self {
-        StorageError::Serialization{source: err}
+        StorageError::Serialization { source: err }
     }
 }
