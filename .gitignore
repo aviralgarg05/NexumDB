@@ -40,3 +40,4 @@ Thumbs.db
 test_cache.json
 test_cache.pkl
 *.cache.json
+.venv/
