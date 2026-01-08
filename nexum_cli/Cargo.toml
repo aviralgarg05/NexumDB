@@ -11,3 +11,7 @@ path = "src/main.rs"
 nexum_core = { path = "../nexum_core" }
 anyhow = { workspace = true }
 tokio = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
