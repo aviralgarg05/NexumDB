@@ -43,14 +43,7 @@ class SemanticCache:
     Uses local embedding models only
     Supports persistence to disk via JSON or pickle files
     """
-<<<<<<< HEAD
 
-    def __init__(self, similarity_threshold: float = 0.95) -> None:
-        self.cache: List[Dict] = []
-        self.similarity_threshold = similarity_threshold
-        self.model = None
-
-=======
     
     def __init__(self, similarity_threshold: float = 0.95, cache_file: str = "semantic_cache.pkl") -> None:
         self.cache: List[Dict] = []
@@ -67,8 +60,7 @@ class SemanticCache:
         
         # Load existing cache on initialization
         self.load_cache()
-        
->>>>>>> origin/feature/cost-based-optimizer
+
     def initialize_model(self) -> None:
         """Initialize local embedding model - deferred to avoid import errors"""
         try:
@@ -414,12 +406,7 @@ class CostBasedOptimizer(QueryOptimizer):
 # Cost-based Join Helper
 # ---------------------------
 def choose_best_join(A_stats, B_stats):
-<<<<<<< HEAD
-=======
-    """
-    Choose the best join order based on nested loop cost.
-    """
->>>>>>> origin/feature/cost-based-optimizer
+
     cost1 = cost_nested_loop(A_stats.row_count, B_stats.row_count)
     cost2 = cost_nested_loop(B_stats.row_count, A_stats.row_count)
 
@@ -429,11 +416,7 @@ def choose_best_join(A_stats, B_stats):
         return "B JOIN A", cost2
 
 
-<<<<<<< HEAD
-# ---------------------------
-# Testing & Utility Functions
-# ---------------------------
-=======
+
 class CostBasedOptimizer:
     def __init__(self, q_table, epsilon: float):
         self.q_table = q_table
@@ -487,7 +470,7 @@ class CostBasedOptimizer:
         }
 
 
->>>>>>> origin/feature/cost-based-optimizer
+
 def test_vectorization() -> Dict[str, Any]:
     """Test function for Rust integration"""
     cache = SemanticCache()
@@ -514,11 +497,6 @@ def explain(query):
     print("Estimated cost:", cost)
 
 
-<<<<<<< HEAD
-# ---------------------------
-# Entry Point for Testing
-# ---------------------------
-=======
 def explain_query_plan(query: str, cache: Optional[SemanticCache] = None, 
                        optimizer: Optional[QueryOptimizer] = None) -> Dict[str, Any]:
     """
@@ -740,7 +718,7 @@ def test_cache_persistence() -> Dict[str, Any]:
     }
 
 
->>>>>>> origin/feature/cost-based-optimizer
+
 if __name__ == "__main__":
     # Run both tests
     print("Running vectorization test...")
