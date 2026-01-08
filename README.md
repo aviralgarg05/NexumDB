@@ -17,6 +17,7 @@ An innovative, open-source database that combines traditional SQL with AI-powere
 - **Query Modifiers**: ORDER BY (multi-column sorting), LIMIT (result truncation)
 - **Persistent RL Agent**: Q-table saves to disk, learning survives restarts
 - **Model Management**: Automatic LLM downloads from HuggingFace Hub
+- **Structured Logging**: Configurable log levels and JSON output for production monitoring
 
 ### v0.2.0 - Intelligent Query Engine
 - **WHERE Clause Filtering**: Full support for comparison (=, >, <, >=, <=, !=) and logical operators (AND, OR)
@@ -117,6 +118,26 @@ cargo test -- --test-threads=1
 ```bash
 ./target/release/nexum
 ```
+
+### Logging Configuration
+
+NexumDB supports configurable logging for debugging and production monitoring:
+
+```bash
+# Default: INFO level with pretty formatting
+./target/release/nexum
+
+# Debug level for detailed information
+RUST_LOG=debug ./target/release/nexum
+
+# JSON format for production monitoring
+RUST_LOG=info NEXUM_LOG_FORMAT=json ./target/release/nexum
+
+# Module-specific logging
+RUST_LOG=nexum_cli=debug,nexum_core=info ./target/release/nexum
+```
+
+See [LOGGING.md](LOGGING.md) for comprehensive logging documentation.
 
 ### SQL Queries
 
@@ -222,6 +243,7 @@ No configuration needed - just use the database!
 5. Comprehensive test suite (11 tests passing)
 6. Query performance instrumentation
 7. Production release build working
+8. Configurable structured logging for debugging and monitoring
 
 ## Technical Highlights
 
@@ -230,6 +252,7 @@ No configuration needed - just use the database!
 - **AI-Powered**: Semantic caching using transformer embeddings
 - **Type-Safe**: Rust core with comprehensive error handling
 - **Well-Tested**: Full unit and integration test coverage
+- **Production-Ready Logging**: Structured logs with JSON output support
 
 ## License
 
