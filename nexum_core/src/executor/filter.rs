@@ -1,3 +1,45 @@
+//! SQL expression evaluation and filtering module.
+//!
+//! This module provides functionality for evaluating SQL WHERE clause expressions
+//! against row data. It supports a wide range of SQL operations including:
+//!
+//! - Comparison operators (=, !=, <, >, <=, >=)
+//! - Logical operators (AND, OR)
+//! - Pattern matching (LIKE with % and _ wildcards)
+//! - List membership (IN, NOT IN)
+//! - Range queries (BETWEEN, NOT BETWEEN)
+//!
+//! # Primary Types
+//!
+//! - [`ExpressionEvaluator`]: The main evaluator that processes SQL expressions
+//!   against row data using column names for field resolution.
+//!
+//! # Usage
+//!
+//! ```rust
+//! use nexum_core::executor::filter::ExpressionEvaluator;
+//! use nexum_core::sql::types::Value;
+//! use sqlparser::ast::Expr;
+//!
+//! // Create evaluator with column schema
+//! let columns = vec!["id".to_string(), "name".to_string(), "age".to_string()];
+//! let evaluator = ExpressionEvaluator::new(columns);
+//!
+//! // Evaluate expression against row data
+//! let row_data = vec![
+//!     Value::Integer(1),
+//!     Value::Text("Alice".to_string()),
+//!     Value::Integer(30),
+//! ];
+//!
+//! // The expression would be parsed from SQL: "age > 25 AND name = 'Alice'"
+//! // let result = evaluator.evaluate(&parsed_expr, &row_data)?;
+//! ```
+//!
+//! This module is used internally by the query executor to filter rows
+//! based on WHERE clause conditions, but is made public to support
+//! benchmarking and testing of filter performance.
+
 use crate::sql::types::Value;
 use anyhow::{anyhow, Result};
 use regex::Regex;
