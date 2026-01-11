@@ -71,12 +71,6 @@ impl StorageError {
         }
     }
 }
-// //implement From conversions for error propagation
-// impl From<sled::Error> for StorageError {
-//     fn from(err: sled::Error) -> Self {
-//         StorageError::Write{source: err}
-//         }
-//     }
 
 impl From<serde_json::Error> for StorageError {
     fn from(err: serde_json::Error) -> Self {

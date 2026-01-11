@@ -34,7 +34,7 @@ impl StorageEngine {
         match self
             .db
             .get(key)
-            .map_err(|e| StorageError::Write { source: e })?
+            .map_err(|e| StorageError::Read { source: e })?
         {
             Some(ivec) => Ok(Some(ivec.to_vec())),
             None => Ok(None),
@@ -51,7 +51,7 @@ impl StorageEngine {
     pub fn scan_prefix(&self, prefix: &[u8]) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
         let mut results = Vec::new();
         for item in self.db.scan_prefix(prefix) {
-            let (k, v) = item.map_err(|e| StorageError::Write { source: e })?;
+            let (k, v) = item.map_err(|e| StorageError::Read { source: e })?;
             results.push((k.to_vec(), v.to_vec()));
         }
         Ok(results)
