@@ -72,7 +72,7 @@ fn main() -> anyhow::Result<()> {
 
                 if input
                     .get(..4)
-                    .map_or(false, |s| s.eq_ignore_ascii_case("ASK "))
+                    .is_some_and(|s| s.eq_ignore_ascii_case("ASK "))
                 {
                     let natural_query = input[4..].trim();
 
@@ -112,7 +112,7 @@ fn main() -> anyhow::Result<()> {
                 // Handle EXPLAIN command
                 if input
                     .get(..8)
-                    .map_or(false, |s| s.eq_ignore_ascii_case("EXPLAIN "))
+                    .is_some_and(|s| s.eq_ignore_ascii_case("EXPLAIN "))
                 {
                     let query_to_explain = input[8..].trim();
 
