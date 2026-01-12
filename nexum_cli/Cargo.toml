@@ -11,3 +11,5 @@ path = "src/main.rs"
 nexum_core = { path = "../nexum_core" }
 anyhow = { workspace = true }
 tokio = { workspace = true }
+rustyline = "14.0"
+dirs = "5.0"

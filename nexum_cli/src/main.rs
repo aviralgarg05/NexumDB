@@ -1,8 +1,10 @@
 use nexum_core::{Catalog, Executor, NLTranslator, Parser, QueryExplainer, StorageEngine};
-use std::io::{self, Write};
+use rustyline::error::ReadlineError;
+use rustyline::DefaultEditor;
+use std::io::Write; // Keep Write for occasional flushing if needed, though rustyline handles prompt.
 
 fn main() -> anyhow::Result<()> {
-    println!("NexumDB v0.2.0 - AI-Native Database with Natural Language Support");
+    println!("NexumDB v0.3.0 - AI-Native Database with Natural Language Support");
     println!("Initializing...\n");
 
     let storage = StorageEngine::new("./nexumdb_data")?;
@@ -37,93 +39,123 @@ fn main() -> anyhow::Result<()> {
     println!("  - EXPLAIN: Type 'EXPLAIN <query>' to see query execution plan");
     println!("  - EXIT: Type 'exit' or 'quit' to exit\n");
 
+    // Initialize rustyline editor
+    let mut rl = DefaultEditor::new()?;
+    
+    // Load history
+    let history_path = dirs::home_dir().map(|p| p.join(".nexum_history"));
+    if let Some(ref path) = history_path {
+        if let Err(_) = rl.load_history(path) {
+            // File might not exist yet, which is fine
+        }
+    }
+
     loop {
-        print!("nexumdb> ");
-        io::stdout().flush()?;
+        let readline = rl.readline("nexumdb> ");
+        match readline {
+            Ok(line) => {
+                let input = line.trim();
+                
+                if input.is_empty() {
+                    continue;
+                }
 
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
+                // Add to history
+                let _ = rl.add_history_entry(line.as_str());
 
-        let input = input.trim();
+                if input.eq_ignore_ascii_case("exit") || input.eq_ignore_ascii_case("quit") {
+                    println!("Goodbye!");
+                    break;
+                }
 
-        if input.is_empty() {
-            continue;
-        }
+                if input.to_uppercase().starts_with("ASK ") {
+                    let natural_query = input[4..].trim();
 
-        if input.eq_ignore_ascii_case("exit") || input.eq_ignore_ascii_case("quit") {
-            println!("Goodbye!");
-            break;
-        }
+                    if let Some(ref translator) = nl_translator {
+                        let schema = get_schema_context(&catalog);
 
-        if input.to_uppercase().starts_with("ASK ") {
-            let natural_query = input[4..].trim();
+                        println!("Translating: '{}'", natural_query);
+                        match translator.translate(natural_query, &schema) {
+                            Ok(sql) => {
+                                println!("Generated SQL: {}", sql);
+                                println!();
 
-            if let Some(ref translator) = nl_translator {
-                let schema = get_schema_context(&catalog);
-
-                println!("Translating: '{}'", natural_query);
-                match translator.translate(natural_query, &schema) {
-                    Ok(sql) => {
-                        println!("Generated SQL: {}", sql);
-                        println!();
-
-                        match Parser::parse(&sql) {
-                            Ok(statement) => match executor.execute(statement) {
-                                Ok(result) => {
-                                    println!("{:?}", result);
+                                match Parser::parse(&sql) {
+                                    Ok(statement) => match executor.execute(statement) {
+                                        Ok(result) => {
+                                            println!("{:?}", result);
+                                        }
+                                        Err(e) => {
+                                            eprintln!("Execution error: {}", e);
+                                        }
+                                    },
+                                    Err(e) => {
+                                        eprintln!("Parse error: {}", e);
+                                    }
                                 }
-                                Err(e) => {
-                                    eprintln!("Execution error: {}", e);
-                                }
-                            },
+                            }
                             Err(e) => {
-                                eprintln!("Parse error: {}", e);
+                                eprintln!("Translation error: {}", e);
                             }
                         }
+                    } else {
+                        eprintln!("Natural language translator not available");
                     }
+                    continue;
+                }
+
+                // Handle EXPLAIN command
+                if input.to_uppercase().starts_with("EXPLAIN ") {
+                    let query_to_explain = input[8..].trim();
+
+                    if let Some(ref explainer) = query_explainer {
+                        println!();
+                        match explainer.explain(query_to_explain) {
+                            Ok(plan) => {
+                                println!("{}", plan);
+                            }
+                            Err(e) => {
+                                eprintln!("Explain error: {}", e);
+                            }
+                        }
+                    } else {
+                        eprintln!("Query explainer not available");
+                    }
+                    continue;
+                }
+
+                match Parser::parse(input) {
+                    Ok(statement) => match executor.execute(statement) {
+                        Ok(result) => {
+                            println!("{:?}", result);
+                        }
+                        Err(e) => {
+                            eprintln!("Execution error: {}", e);
+                        }
+                    },
                     Err(e) => {
-                        eprintln!("Translation error: {}", e);
+                        eprintln!("Parse error: {}", e);
                     }
                 }
-            } else {
-                eprintln!("Natural language translator not available");
             }
-            continue;
-        }
-
-        // Handle EXPLAIN command
-        if input.to_uppercase().starts_with("EXPLAIN ") {
-            let query_to_explain = input[8..].trim();
-
-            if let Some(ref explainer) = query_explainer {
-                println!();
-                match explainer.explain(query_to_explain) {
-                    Ok(plan) => {
-                        println!("{}", plan);
-                    }
-                    Err(e) => {
-                        eprintln!("Explain error: {}", e);
-                    }
-                }
-            } else {
-                eprintln!("Query explainer not available");
+            Err(ReadlineError::Interrupted) => {
+                println!("CTRL-C");
+                break;
             }
-            continue;
-        }
-
-        match Parser::parse(input) {
-            Ok(statement) => match executor.execute(statement) {
-                Ok(result) => {
-                    println!("{:?}", result);
-                }
-                Err(e) => {
-                    eprintln!("Execution error: {}", e);
-                }
-            },
-            Err(e) => {
-                eprintln!("Parse error: {}", e);
+            Err(ReadlineError::Eof) => {
+                println!("CTRL-D");
+                break;
+            }
+            Err(err) => {
+                println!("Error: {:?}", err);
+                break;
             }
         }
+    }
+
+    // Save history
+    if let Some(ref path) = history_path {
+        let _ = rl.save_history(path);
     }
 
     Ok(())
