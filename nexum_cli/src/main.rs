@@ -1,7 +1,6 @@
 use nexum_core::{Catalog, Executor, NLTranslator, Parser, QueryExplainer, StorageEngine};
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
-use std::io::Write; // Keep Write for occasional flushing if needed, though rustyline handles prompt.
 
 fn main() -> anyhow::Result<()> {
     println!("NexumDB v0.3.0 - AI-Native Database with Natural Language Support");
@@ -44,10 +43,11 @@ fn main() -> anyhow::Result<()> {
 
     // Load history
     let history_path = dirs::home_dir().map(|p| p.join(".nexum_history"));
+    if history_path.is_none() {
+        eprintln!("Warning: Could not determine home directory, history will not be saved");
+    }
     if let Some(ref path) = history_path {
-        if let Err(_) = rl.load_history(path) {
-            // File might not exist yet, which is fine
-        }
+        let _ = rl.load_history(path); // File might not exist yet, which is fine
     }
 
     loop {
@@ -147,7 +147,7 @@ fn main() -> anyhow::Result<()> {
                 break;
             }
             Err(err) => {
-                println!("Error: {:?}", err);
+                eprintln!("Error: {}", err);
                 break;
             }
         }
@@ -155,7 +155,9 @@ fn main() -> anyhow::Result<()> {
 
     // Save history
     if let Some(ref path) = history_path {
-        let _ = rl.save_history(path);
+        if let Err(e) = rl.save_history(path) {
+            eprintln!("Warning: Could not save history: {}", e);
+        }
     }
 
     Ok(())

@@ -7,9 +7,10 @@ edition = "2021"
 name = "nexum"
 path = "src/main.rs"
 
+
 [dependencies]
 nexum_core = { path = "../nexum_core" }
 anyhow = { workspace = true }
 tokio = { workspace = true }
-rustyline = "14.0"
-dirs = "5.0"
+rustyline = "15.0"
+dirs = "6.0"
