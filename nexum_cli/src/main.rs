@@ -43,11 +43,13 @@ fn main() -> anyhow::Result<()> {
 
     // Load history
     let history_path = dirs::home_dir().map(|p| p.join(".nexum_history"));
-    if history_path.is_none() {
-        eprintln!("Warning: Could not determine home directory, history will not be saved");
-    }
-    if let Some(ref path) = history_path {
-        let _ = rl.load_history(path); // File might not exist yet, which is fine
+    match history_path {
+        Some(ref path) => {
+            let _ = rl.load_history(path); // File might not exist yet, which is fine
+        }
+        None => {
+            eprintln!("Warning: Could not determine home directory, history will not be saved");
+        }
     }
 
     loop {
@@ -68,7 +70,7 @@ fn main() -> anyhow::Result<()> {
                     break;
                 }
 
-                if input.to_uppercase().starts_with("ASK ") {
+                if input.len() >= 4 && input[..4].eq_ignore_ascii_case("ASK ") {
                     let natural_query = input[4..].trim();
 
                     if let Some(ref translator) = nl_translator {
@@ -105,7 +107,7 @@ fn main() -> anyhow::Result<()> {
                 }
 
                 // Handle EXPLAIN command
-                if input.to_uppercase().starts_with("EXPLAIN ") {
+                if input.len() >= 8 && input[..8].eq_ignore_ascii_case("EXPLAIN ") {
                     let query_to_explain = input[8..].trim();
 
                     if let Some(ref explainer) = query_explainer {
