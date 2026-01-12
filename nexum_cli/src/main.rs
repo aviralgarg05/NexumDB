@@ -70,7 +70,7 @@ fn main() -> anyhow::Result<()> {
                     break;
                 }
 
-                if input.len() >= 4 && input[..4].eq_ignore_ascii_case("ASK ") {
+                if input.get(..4).map_or(false, |s| s.eq_ignore_ascii_case("ASK ")) {
                     let natural_query = input[4..].trim();
 
                     if let Some(ref translator) = nl_translator {
@@ -107,7 +107,7 @@ fn main() -> anyhow::Result<()> {
                 }
 
                 // Handle EXPLAIN command
-                if input.len() >= 8 && input[..8].eq_ignore_ascii_case("EXPLAIN ") {
+                if input.get(..8).map_or(false, |s| s.eq_ignore_ascii_case("EXPLAIN ")) {
                     let query_to_explain = input[8..].trim();
 
                     if let Some(ref explainer) = query_explainer {
