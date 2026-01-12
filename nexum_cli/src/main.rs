@@ -41,7 +41,7 @@ fn main() -> anyhow::Result<()> {
 
     // Initialize rustyline editor
     let mut rl = DefaultEditor::new()?;
-    
+
     // Load history
     let history_path = dirs::home_dir().map(|p| p.join(".nexum_history"));
     if let Some(ref path) = history_path {
@@ -55,7 +55,7 @@ fn main() -> anyhow::Result<()> {
         match readline {
             Ok(line) => {
                 let input = line.trim();
-                
+
                 if input.is_empty() {
                     continue;
                 }
