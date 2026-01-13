@@ -1,9 +1,8 @@
-
-
 class TableStats:
     def __init__(self):
         self.row_count = 0
         self.distinct = {}  # column_name -> set of distinct values
+
 
 def analyze(table):
     stats = TableStats()

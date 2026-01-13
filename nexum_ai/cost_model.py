@@ -3,9 +3,12 @@ def cost_scan(rows):
     """Cost for scanning a table"""
     return rows
 
+
 def cost_filter(rows):
     """Cost for filtering rows"""
     return rows
+
+
 def cost_nested_loop(outer_rows, inner_rows):
     """
     Simple nested-loop cost model:

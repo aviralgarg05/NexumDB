@@ -45,5 +45,6 @@ class TestOptimizerHelpers(unittest.TestCase):
         # Optimizer intuition: smaller cardinality is cheaper
         self.assertLess(card_x, card_y)
 
+
 if __name__ == "__main__":
     unittest.main()
