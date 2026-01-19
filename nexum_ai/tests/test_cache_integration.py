@@ -10,8 +10,8 @@ import tempfile
 import shutil
 from pathlib import Path
 
-# Add nexum_ai to path
-sys.path.insert(0, str(Path(__file__).parent))
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from nexum_ai.optimizer import SemanticCache
 
@@ -19,7 +19,7 @@ from nexum_ai.optimizer import SemanticCache
 def test_cache_persistence_lifecycle():
     """Test complete cache persistence lifecycle"""
     
-    print("🧪 Testing Semantic Cache Persistence Lifecycle")
+    print("Testing Semantic Cache Persistence Lifecycle")
     print("=" * 60)
     
     # Use temporary directory for testing
@@ -27,7 +27,7 @@ def test_cache_persistence_lifecycle():
         cache_file = os.path.join(temp_dir, "test_cache.pkl")
         
         # Test 1: Create cache and populate
-        print("\n1️⃣ Creating cache and adding entries...")
+        print("\n1. Creating cache and adding entries...")
         cache1 = SemanticCache(cache_file=cache_file)
         
         test_data = [
@@ -43,67 +43,69 @@ def test_cache_persistence_lifecycle():
         cache1.save_cache()
         
         stats1 = cache1.get_cache_stats()
-        print(f"   ✅ Added {stats1['total_entries']} entries")
+        print(f"   Added {stats1['total_entries']} entries")
         
         # Test 2: Verify file exists
-        print("\n2️⃣ Verifying cache file creation...")
-        assert os.path.exists(cache_file), "Cache file should exist"
-        file_size = os.path.getsize(cache_file)
-        print(f"   ✅ Cache file exists ({file_size} bytes)")
+        print("\n2. Verifying cache file creation...")
+        # SemanticCache saves as .json by default even if .pkl is provided
+        actual_cache_file = cache_file.replace('.pkl', '.json')
+        assert os.path.exists(actual_cache_file), f"Cache file {actual_cache_file} should exist"
+        file_size = os.path.getsize(actual_cache_file)
+        print(f"   Cache file exists ({file_size} bytes)")
         
         # Test 3: Create new instance and verify loading
-        print("\n3️⃣ Creating new cache instance...")
+        print("\n3. Creating new cache instance...")
         cache2 = SemanticCache(cache_file=cache_file)
         
         stats2 = cache2.get_cache_stats()
-        print(f"   ✅ Loaded {stats2['total_entries']} entries")
+        print(f"   Loaded {stats2['total_entries']} entries")
         
         assert stats1['total_entries'] == stats2['total_entries'], "Entry count should match"
         
         # Test 4: Verify cache hits
-        print("\n4️⃣ Testing cache hits...")
+        print("\n4. Testing cache hits...")
         hit_count = 0
         for query, expected_result in test_data:
             cached_result = cache2.get(query)
             if cached_result == expected_result:
                 hit_count += 1
-                print(f"   ✅ Hit: {query[:30]}...")
+                print(f"   Hit: {query[:30]}...")
             else:
-                print(f"   ❌ Miss: {query[:30]}...")
+                print(f"   Miss: {query[:30]}...")
         
         assert hit_count == len(test_data), f"Expected {len(test_data)} hits, got {hit_count}"
         
         # Test 5: Test JSON export
-        print("\n5️⃣ Testing JSON export...")
+        print("\n5. Testing JSON export...")
         json_file = os.path.join(temp_dir, "test_cache.json")
         cache2.save_cache_json(json_file)
         
         assert os.path.exists(json_file), "JSON file should exist"
-        print(f"   ✅ JSON export successful")
+        print(f"   JSON export successful")
         
         # Test 6: Test cache optimization
-        print("\n6️⃣ Testing cache optimization...")
+        print("\n6. Testing cache optimization...")
         cache2.optimize_cache(max_entries=2)
         
         stats3 = cache2.get_cache_stats()
         assert stats3['total_entries'] == 2, "Should have 2 entries after optimization"
-        print(f"   ✅ Cache optimized to {stats3['total_entries']} entries")
+        print(f"   Cache optimized to {stats3['total_entries']} entries")
         
         # Test 7: Test cache clearing
-        print("\n7️⃣ Testing cache clearing...")
+        print("\n7. Testing cache clearing...")
         cache2.clear()
         
         assert not os.path.exists(cache_file), "Cache file should be deleted"
-        print("   ✅ Cache cleared successfully")
+        print("   Cache cleared successfully")
         
-        print("\n✨ All tests passed!")
+        print("\nAll tests passed!")
         return True
 
 
 def test_environment_variable_config():
     """Test environment variable configuration"""
     
-    print("\n🌍 Testing Environment Variable Configuration")
+    print("\nTesting Environment Variable Configuration")
     print("=" * 60)
     
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -119,8 +121,9 @@ def test_environment_variable_config():
             cache.save_cache()
             
             # Verify it used the custom path
-            assert os.path.exists(custom_cache), "Should use environment variable path"
-            print("   ✅ Environment variable configuration works")
+            actual_custom_cache = custom_cache.replace('.pkl', '.json')
+            assert os.path.exists(actual_custom_cache), f"Should use environment variable path: {actual_custom_cache}"
+            print("   Environment variable configuration works")
             
             cache.clear()
             
@@ -135,22 +138,22 @@ def test_environment_variable_config():
 def test_error_handling():
     """Test error handling scenarios"""
     
-    print("\n🛡️ Testing Error Handling")
+    print("\nTesting Error Handling")
     print("=" * 60)
     
     with tempfile.TemporaryDirectory() as temp_dir:
         # Test 1: Invalid cache file path
-        print("\n1️⃣ Testing invalid cache file path...")
+        print("\n1. Testing invalid cache file path...")
         try:
             invalid_path = os.path.join("/nonexistent/path", "cache.pkl")
             cache = SemanticCache(cache_file=invalid_path)
             cache.put("SELECT 1", "test")
-            print("   ⚠️ Should handle invalid paths gracefully")
+            print("   Warning: Should handle invalid paths gracefully")
         except Exception as e:
-            print(f"   ✅ Handled error gracefully: {type(e).__name__}")
+            print(f"   Handled error gracefully: {type(e).__name__}")
         
         # Test 2: Corrupted cache file
-        print("\n2️⃣ Testing corrupted cache file...")
+        print("\n2. Testing corrupted cache file...")
         corrupted_file = os.path.join(temp_dir, "corrupted.pkl")
         
         # Create corrupted file
@@ -161,7 +164,7 @@ def test_error_handling():
         # Should start with empty cache
         stats = cache.get_cache_stats()
         assert stats['total_entries'] == 0, "Should start with empty cache for corrupted file"
-        print("   ✅ Handled corrupted cache file gracefully")
+        print("   Handled corrupted cache file gracefully")
         
         cache.clear()
         
@@ -171,7 +174,7 @@ def test_error_handling():
 def main():
     """Run all integration tests"""
     
-    print("🚀 NexumDB Semantic Cache Integration Tests")
+    print("NexumDB Semantic Cache Integration Tests")
     print("=" * 80)
     
     tests = [
@@ -185,25 +188,25 @@ def main():
     
     for test_name, test_func in tests:
         try:
-            print(f"\n📋 Running: {test_name}")
+            print(f"\nRunning: {test_name}")
             if test_func():
                 passed += 1
-                print(f"✅ PASSED: {test_name}")
+                print(f"PASSED: {test_name}")
             else:
                 failed += 1
-                print(f"❌ FAILED: {test_name}")
+                print(f"FAILED: {test_name}")
         except Exception as e:
             failed += 1
-            print(f"❌ FAILED: {test_name} - {e}")
+            print(f"FAILED: {test_name} - {e}")
     
     print("\n" + "=" * 80)
     print(f"📊 Test Results: {passed} passed, {failed} failed")
     
     if failed == 0:
-        print("🎉 All integration tests passed!")
+        print("All integration tests passed!")
         return True
     else:
-        print("💥 Some tests failed!")
+        print("Some tests failed!")
         return False
 
 

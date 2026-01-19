@@ -5,7 +5,8 @@ Test script for EXPLAIN query plan feature (Issue #48)
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'nexum_ai'))
+# Add project root to path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 from nexum_ai.optimizer import explain_query_plan, format_explain_output, SemanticCache
 from nexum_ai.rl_agent import QLearningAgent
@@ -54,7 +55,7 @@ def test_explain_feature():
         assert 'rl_agent' in explain_result
         assert 'execution_strategy' in explain_result
         
-        print(f"✓ Test {i} passed - All components present")
+        print(f"Test {i} passed - All components present")
     
     print(f"\n{'=' * 70}")
     print("ALL TESTS PASSED - EXPLAIN FEATURE WORKING CORRECTLY")
@@ -65,20 +66,20 @@ def test_explain_feature():
     
     # Test cache explain
     cache_result = cache.explain_query("SELECT * FROM users WHERE age > 35")
-    print(f"✓ Cache explain: {cache_result['cache_entries_checked']} entries checked")
+    print(f"Cache explain: {cache_result['cache_entries_checked']} entries checked")
     
     # Test RL agent explain
     agent = QLearningAgent()
     rl_result = agent.explain_action(30, False, 5)
-    print(f"✓ RL agent explain: State {rl_result['state']}, Action {rl_result['best_action']}")
+    print(f"RL agent explain: State {rl_result['state']}, Action {rl_result['best_action']}")
     
     return True
 
 if __name__ == "__main__":
     try:
         test_explain_feature()
-        print("\n🎉 EXPLAIN query plan feature implementation complete!")
+        print("\nEXPLAIN query plan feature implementation complete!")
         print("Usage: EXPLAIN <query> in the NexumDB CLI")
     except Exception as e:
-        print(f"❌ Test failed: {e}")
+        print(f"Test failed: {e}")
         sys.exit(1)
