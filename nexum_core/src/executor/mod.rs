@@ -63,7 +63,7 @@ impl Executor {
                 let _schema = self
                     .catalog
                     .get_table(&table)?
-                    .ok_or_else(|| StorageError::ReadError(format!("Table {} not found", table)))?;
+                    .ok_or_else(|| StorageError::KeyNotFound { key: table.clone() })?;
 
                 for row_values in &values {
                     let row = Row {
@@ -100,7 +100,7 @@ impl Executor {
                 let schema = self
                     .catalog
                     .get_table(&table)?
-                    .ok_or_else(|| StorageError::ReadError(format!("Table {} not found", table)))?;
+                    .ok_or_else(|| StorageError::KeyNotFound { key: table.clone() })?;
 
                 let prefix = Self::table_data_prefix(&table);
                 let all_rows = self.storage.scan_prefix(&prefix)?;
@@ -175,7 +175,7 @@ impl Executor {
                 let schema = self
                     .catalog
                     .get_table(&table)?
-                    .ok_or_else(|| StorageError::ReadError(format!("Table {} not found", table)))?;
+                    .ok_or_else(|| StorageError::KeyNotFound { key: table.clone() })?;
 
                 let prefix = Self::table_data_prefix(&table);
 
@@ -200,9 +200,11 @@ impl Executor {
                                     // Row doesn't match WHERE condition, skip
                                 }
                                 Err(e) => {
-                                    return Err(StorageError::ReadError(format!(
+                                    return Err(StorageError::LogicalWrite{
+                                        message: format!(
                                             "WHERE clause evaluation failed on row: {}. No rows were deleted.", e
-                                        )));
+                                        ),
+                                    });
                                 }
                             }
                         }
@@ -390,7 +392,7 @@ impl Executor {
         if let Some(cache) = &self.cache {
             cache
                 .save_cache()
-                .map_err(|e| StorageError::WriteError(e.to_string()))?;
+                .map_err(|e| StorageError::CacheWrite { source: e })?;
             println!("Semantic cache saved to disk");
         } else {
             println!("No semantic cache to save");
@@ -402,7 +404,7 @@ impl Executor {
         if let Some(cache) = &self.cache {
             cache
                 .clear_cache()
-                .map_err(|e| StorageError::WriteError(e.to_string()))?;
+                .map_err(|e| StorageError::CacheWrite { source: e })?;
             println!("Semantic cache cleared");
         } else {
             println!("No semantic cache to clear");
@@ -414,7 +416,7 @@ impl Executor {
         if let Some(cache) = &self.cache {
             cache
                 .get_cache_stats()
-                .map_err(|e| StorageError::ReadError(e.to_string()))
+                .map_err(|e| StorageError::CacheRead { source: e })
         } else {
             Ok("No semantic cache enabled".to_string())
         }
