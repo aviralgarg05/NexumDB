@@ -5,7 +5,7 @@ resolver = "2"
 [workspace.dependencies]
 sled = "0.34"
 sqlparser = "0.39"
-pyo3 = { version = "0.24", features = ["auto-initialize"] }
+pyo3 = { version = "0.28", features = ["auto-initialize"] }
 anyhow = "1.0"
 thiserror = "1.0"
 tokio = { version = "1.35", features = ["full"] }
