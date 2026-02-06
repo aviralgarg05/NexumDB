@@ -44,7 +44,7 @@ mpmath==1.3.0
 networkx==3.4.2
     # via torch
 # numpy pinned to 1.26.4 because torch==2.9.1 does not support numpy 2.x yet
-numpy==1.26.4
+numpy==2.4.2
     # via
     #   -r requirements.txt
     #   llama-cpp-python
