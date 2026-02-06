@@ -5,6 +5,20 @@ All notable changes to NexumDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0](https://github.com/aviralgarg05/NexumDB/compare/v0.5.0...v0.6.0) (2026-02-06)
+
+
+### Features
+
+* align templates and README with OSCG'26 guidelines ([79bb239](https://github.com/aviralgarg05/NexumDB/commit/79bb239c88fe4a434d7dc0ecc04d700d5363c19a))
+* enhance PR review automation with comprehensive workflows ([ad3fda1](https://github.com/aviralgarg05/NexumDB/commit/ad3fda1a4bc26bfc125f42870028acec06d02a05))
+
+
+### Bug Fixes
+
+* correct Release Please conditional syntax to single line ([d1382ba](https://github.com/aviralgarg05/NexumDB/commit/d1382ba086254a525a62f42d244a69c06b2833e4))
+* release only on direct pushes, not PR merges ([8d4ab16](https://github.com/aviralgarg05/NexumDB/commit/8d4ab16ac393b3974436c00cce90fc9fff4d1bcc))
+
 ## [0.5.0](https://github.com/aviralgarg05/NexumDB/compare/v0.4.0...v0.5.0) (2026-02-06)
 
 
