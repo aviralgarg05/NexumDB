@@ -131,13 +131,13 @@ The Release Please workflow requires repository settings update. See `/tmp/relea
 ## Pre-commit Checklist
 
 Before pushing changes:
-1. ✅ Run `cargo fmt --all`
-2. ✅ Run `cargo clippy --workspace --all-targets`
-3. ✅ Run `cargo test --workspace`
-4. ✅ Run `ruff check nexum_ai/` (if Python changes)
-5. ✅ Run `pytest` in nexum_ai/ (if Python changes)
-6. ✅ Ensure all tests pass locally
-7. ✅ Sign commits with DCO (`git commit -s`)
+1. Run `cargo fmt --all`
+2. Run `cargo clippy --workspace --all-targets`
+3. Run `cargo test --workspace`
+4. Run `ruff check nexum_ai/` (if Python changes)
+5. Run `pytest` in nexum_ai/ (if Python changes)
+6. Ensure all tests pass locally
+7. Sign commits with DCO (`git commit -s`)
 
 ## Continuous Improvement
 

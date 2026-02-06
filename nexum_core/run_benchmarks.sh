@@ -5,12 +5,12 @@
 
 set -e
 
-echo "🚀 Running NexumDB Core Benchmarks"
+echo "Running NexumDB Core Benchmarks"
 echo "=================================="
 
 # Check if we're in the right directory
 if [ ! -f "Cargo.toml" ] || [ ! -d "benches" ]; then
-    echo "❌ Error: Please run this script from the nexum_core directory"
+    echo "Error: Please run this script from the nexum_core directory"
     exit 1
 fi
 
@@ -20,7 +20,7 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 RESULTS_DIR="benchmark_results/run_$TIMESTAMP"
 mkdir -p "$RESULTS_DIR"
 
-echo "📁 Results will be saved to: $RESULTS_DIR"
+echo "Results will be saved to: $RESULTS_DIR"
 echo ""
 
 # Function to run a benchmark suite
@@ -28,14 +28,14 @@ run_benchmark() {
     local bench_name=$1
     local description=$2
     
-    echo "🔧 Running $description..."
+    echo "Running $description..."
     echo "   Benchmark: $bench_name"
     
     # Run the benchmark and capture output
     if cargo bench --bench "$bench_name" 2>&1 | tee "$RESULTS_DIR/${bench_name}_output.log"; then
-        echo "   ✅ $description completed successfully"
+        echo "   $description completed successfully"
     else
-        echo "   ❌ $description failed"
+        echo "   $description failed"
         return 1
     fi
     echo ""
@@ -52,15 +52,15 @@ run_benchmark "filter_bench" "Filter Evaluation Benchmarks"
 
 # Copy criterion reports
 if [ -d "target/criterion" ]; then
-    echo "📊 Copying detailed reports..."
+    echo "Copying detailed reports..."
     cp -r target/criterion "$RESULTS_DIR/"
-    echo "   ✅ Criterion reports copied"
+    echo "   Criterion reports copied"
 else
-    echo "   ⚠️  No criterion reports found"
+    echo "   No criterion reports found"
 fi
 
 # Generate summary
-echo "📋 Generating benchmark summary..."
+echo "Generating benchmark summary..."
 cat > "$RESULTS_DIR/summary.md" << EOF
 # NexumDB Core Benchmark Results
 
@@ -70,10 +70,10 @@ cat > "$RESULTS_DIR/summary.md" << EOF
 
 ## Benchmark Suites Executed
 
-- ✅ Storage Engine Benchmarks
-- ✅ SQL Parser Benchmarks  
-- ✅ Query Executor Benchmarks
-- ✅ Filter Evaluation Benchmarks
+- Storage Engine Benchmarks
+- SQL Parser Benchmarks  
+- Query Executor Benchmarks
+- Filter Evaluation Benchmarks
 
 ## Files Generated
 

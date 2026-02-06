@@ -19,41 +19,41 @@ jobs:
                       const prAuthor = context.payload.pull_request.user.login;
                       const prNumber = context.payload.pull_request.number;
                       const prTitle = context.payload.pull_request.title;
-                      
+
                       // Get files changed
                       const { data: files } = await github.rest.pulls.listFiles({
                         owner: context.repo.owner,
                         repo: context.repo.repo,
                         pull_number: prNumber,
                       });
-                      
+
                       const changedFiles = files.map(f => f.filename);
                       const hasRustChanges = changedFiles.some(f => f.endsWith('.rs'));
                       const hasPythonChanges = changedFiles.some(f => f.endsWith('.py'));
                       const hasDocChanges = changedFiles.some(f => f.endsWith('.md'));
                       const hasCIChanges = changedFiles.some(f => f.startsWith('.github/workflows/'));
                       const hasTestChanges = changedFiles.some(f => f.includes('test'));
-                      
-                      let comment = `## 🎉 Thank you for your contribution, @${prAuthor}!\n\n`;
-                      comment += `### 📋 PR Analysis\n\n`;
+
+                      let comment = `## Thank you for your contribution, @${prAuthor}!\n\n`;
+                      comment += `### PR Analysis\n\n`;
                       comment += `**Files Changed:** ${files.length}\n`;
                       comment += `**Components:**\n`;
-                      if (hasRustChanges) comment += `- 🦀 Rust core changes detected\n`;
-                      if (hasPythonChanges) comment += `- 🐍 Python AI components changed\n`;
-                      if (hasDocChanges) comment += `- 📝 Documentation updates\n`;
-                      if (hasCIChanges) comment += `- ⚙️ CI/CD workflow changes\n`;
-                      if (hasTestChanges) comment += `- ✅ Test changes included\n`;
-                      
-                      comment += `\n### ⚡ Quick Checks\n\n`;
+                      if (hasRustChanges) comment += `- Rust core changes detected\n`;
+                      if (hasPythonChanges) comment += `- Python AI components changed\n`;
+                      if (hasDocChanges) comment += `- Documentation updates\n`;
+                      if (hasCIChanges) comment += `- CI/CD workflow changes\n`;
+                      if (hasTestChanges) comment += `- Test changes included\n`;
+
+                      comment += `\n### Quick Checks\n\n`;
                       comment += `Before requesting review, please ensure:\n`;
-                      comment += `- [ ] All CI checks are passing ✅\n`;
+                      comment += `- [ ] All CI checks are passing\n`;
                       comment += `- [ ] PR template checkboxes are completed\n`;
                       comment += `- [ ] Linked related issue(s)\n`;
                       comment += `- [ ] Added/updated tests for changes\n`;
                       comment += `- [ ] Documentation updated if needed\n\n`;
-                      
+
                       if (hasRustChanges) {
-                        comment += `### 🦀 Rust Changes Noticed\n`;
+                        comment += `### Rust Changes Noticed\n`;
                         comment += `Run locally before pushing:\n`;
                         comment += `\`\`\`bash\n`;
                         comment += `cargo fmt --all\n`;
@@ -61,20 +61,20 @@ jobs:
                         comment += `cargo test --workspace -- --test-threads=1\n`;
                         comment += `\`\`\`\n\n`;
                       }
-                      
+
                       if (hasPythonChanges) {
-                        comment += `### 🐍 Python Changes Noticed\n`;
+                        comment += `### Python Changes Noticed\n`;
                         comment += `Run locally before pushing:\n`;
                         comment += `\`\`\`bash\n`;
                         comment += `python -m ruff check nexum_ai/\n`;
                         comment += `python -m compileall nexum_ai/\n`;
                         comment += `\`\`\`\n\n`;
                       }
-                      
+
                       comment += `---\n`;
-                      comment += `💡 **Tip:** CodeRabbit will automatically review your PR. Address any feedback before requesting human review.\n`;
-                      comment += `📚 New to contributing? Check out [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md) for guidelines.\n`;
-                      
+                      comment += `**Tip:** CodeRabbit will automatically review your PR. Address any feedback before requesting human review.\n`;
+                      comment += `New to contributing? Check out [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md) for guidelines.\n`;
+
                       await github.rest.issues.createComment({
                         owner: context.repo.owner,
                         repo: context.repo.repo,

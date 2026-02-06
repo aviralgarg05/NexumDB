@@ -21,7 +21,7 @@ jobs:
               with:
                   script: |
                       let prs = [];
-                      
+
                       if (context.eventName === 'pull_request') {
                         // Check current PR only
                         prs = [context.payload.pull_request];
@@ -35,7 +35,7 @@ jobs:
                         });
                         prs = openPRs;
                       }
-                      
+
                       for (const pr of prs) {
                         // Get fresh PR data
                         const { data: prData } = await github.rest.pulls.get({
@@ -43,7 +43,7 @@ jobs:
                           repo: context.repo.repo,
                           pull_number: pr.number
                         });
-                        
+
                         if (prData.mergeable_state === 'dirty' || prData.mergeable === false) {
                           // Get existing comments
                           const { data: comments } = await github.rest.issues.listComments({
@@ -51,17 +51,17 @@ jobs:
                             repo: context.repo.repo,
                             issue_number: pr.number
                           });
-                          
-                          const hasConflictComment = comments.some(c => 
-                            c.body.includes('⚠️ Merge Conflict Detected') &&
+
+                          const hasConflictComment = comments.some(c =>
+                            c.body.includes('Merge Conflict Detected') &&
                             c.user.type === 'Bot'
                           );
-                          
+
                           // Only comment if no recent conflict comment exists
                           if (!hasConflictComment) {
-                            const comment = `## ⚠️ Merge Conflict Detected\n\n` +
+                            const comment = `## Merge Conflict Detected\n\n` +
                               `This PR has merge conflicts with the \`main\` branch that must be resolved before it can be merged.\n\n` +
-                              `### 🔧 How to Resolve:\n\n` +
+                              `### How to Resolve:\n\n` +
                               `**Option 1: Update from main**\n` +
                               `\`\`\`bash\n` +
                               `git checkout main\n` +
@@ -84,15 +84,15 @@ jobs:
                               `git push --force-with-lease\n` +
                               `\`\`\`\n\n` +
                               `---\n` +
-                              `💡 Need help? Check out [GitHub's guide on resolving merge conflicts](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/addressing-merge-conflicts/resolving-a-merge-conflict-using-the-command-line).\n`;
-                            
+                              `Need help? Check out [GitHub's guide on resolving merge conflicts](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/addressing-merge-conflicts/resolving-a-merge-conflict-using-the-command-line).\n`;
+
                             await github.rest.issues.createComment({
                               owner: context.repo.owner,
                               repo: context.repo.repo,
                               issue_number: pr.number,
                               body: comment
                             });
-                            
+
                             console.log(`Posted conflict notice for PR #${pr.number}`);
                           }
                         } else if (prData.mergeable === true) {
@@ -102,12 +102,12 @@ jobs:
                             repo: context.repo.repo,
                             issue_number: pr.number
                           });
-                          
-                          const conflictComments = comments.filter(c => 
-                            c.body.includes('⚠️ Merge Conflict Detected') &&
+
+                          const conflictComments = comments.filter(c =>
+                            c.body.includes('Merge Conflict Detected') &&
                             c.user.type === 'Bot'
                           );
-                          
+
                           for (const comment of conflictComments) {
                             await github.rest.issues.deleteComment({
                               owner: context.repo.owner,
@@ -118,5 +118,5 @@ jobs:
                           }
                         }
                       }
-                      
+
                       console.log('Conflict check completed');

@@ -11,16 +11,16 @@ Closes #(issue_number) <!-- Link related issues with "Closes #123" or "Fixes #45
 
 ## Type of Change
 <!-- Check all that apply -->
-- [ ] 🐛 Bug fix (non-breaking change fixing an issue)
-- [ ] ✨ New feature (non-breaking change adding functionality)
-- [ ] 💥 Breaking change (fix or feature causing existing functionality to change)
-- [ ] 📝 Documentation update
-- [ ] ♻️ Refactoring (code improvement without behavior change)
-- [ ] 🎨 Style/UI changes
-- [ ] ⚡ Performance improvement
-- [ ] ✅ Test addition or update
-- [ ] 🔧 Configuration/build changes
-- [ ] 🔒 Security fix
+- [ ] Bug fix (non-breaking change fixing an issue)
+- [ ] New feature (non-breaking change adding functionality)
+- [ ] Breaking change (fix or feature causing existing functionality to change)
+- [ ] Documentation update
+- [ ] Refactoring (code improvement without behavior change)
+- [ ] Style/UI changes
+- [ ] Performance improvement
+- [ ] Test addition or update
+- [ ] Configuration/build changes
+- [ ] Security fix
 
 ## Testing
 <!-- Describe how you tested these changes -->
@@ -72,4 +72,4 @@ Closes #(issue_number) <!-- Link related issues with "Closes #123" or "Fixes #45
 ## Additional Notes
 <!-- Any additional context, deployment notes, follow-up tasks, or breaking changes details -->
 
-**Reviewers**: Please check that all checkboxes are ticked before approving ✅
+**Reviewers**: Please check that all checkboxes are ticked before approving

@@ -3,17 +3,17 @@
 This document outlines the planned features and improvements for NexumDB.
 
 ## Legend
-- 🚀 **Planned** - On the roadmap
-- 🔨 **In Progress** - Currently being worked on
-- ✅ **Completed** - Shipped in a release
-- 💭 **Considering** - Under evaluation
+- **Planned** - On the roadmap
+- **In Progress** - Currently being worked on
+- **Completed** - Shipped in a release
+- **Considering** - Under evaluation
 
 ---
 
 ## v0.5.0 (Next Release)
-🔨 **Current Focus: Open Source Readiness & Community Building**
+**In Progress: Open Source Readiness & Community Building**
 
-### Infrastructure ✅
+### Infrastructure (Completed)
 - [x] Complete OSS setup (LICENSE, CONTRIBUTING, CODE_OF_CONDUCT)
 - [x] Comprehensive CI/CD pipelines
 - [x] Security scanning (CodeQL, cargo audit)
@@ -28,7 +28,7 @@ This document outlines the planned features and improvements for NexumDB.
 ---
 
 ## v0.6.0 - Enhanced SQL Features
-🚀 **Planned Q1 2026**
+**Planned Q1 2026**
 
 ### SQL Improvements
 - [ ] JOIN operations (INNER, LEFT, RIGHT, FULL)
@@ -47,7 +47,7 @@ This document outlines the planned features and improvements for NexumDB.
 ---
 
 ## v0.7.0 - Advanced AI Features
-🚀 **Planned Q2 2026**
+**Planned Q2 2026**
 
 ### AI/ML Enhancements
 - [ ] Multi-model support (different LLMs)
@@ -66,7 +66,7 @@ This document outlines the planned features and improvements for NexumDB.
 ---
 
 ## v0.8.0 - Enterprise Features
-🚀 **Planned Q3 2026**
+**Planned Q3 2026**
 
 ### Security & Compliance
 - [ ] Row-level security
@@ -86,7 +86,7 @@ This document outlines the planned features and improvements for NexumDB.
 ---
 
 ## v0.9.0 - Developer Experience
-🚀 **Planned Q4 2026**
+**Planned Q4 2026**
 
 ### Tooling
 - [ ] VS Code extension
@@ -107,7 +107,7 @@ This document outlines the planned features and improvements for NexumDB.
 ---
 
 ## v1.0.0 - Production Ready
-🚀 **Target: Mid 2027**
+**Target: Mid 2027**
 
 ### Stability
 - [ ] Comprehensive test coverage (>90%)
@@ -162,25 +162,25 @@ Priority areas for contributions:
 
 ## Version History
 
-### v0.4.0 ✅ (Current)
+### v0.4.0 (Current)
 - Project-correct SELECT with column/alias projection
 - Schema-safe writes (INSERT/UPDATE validation)
 - Table management (SHOW TABLES, DESCRIBE, DROP TABLE)
 - Cache safety improvements
 
-### v0.3.0 ✅
+### v0.3.0
 - Advanced SQL operators (LIKE, IN, BETWEEN)
 - Query modifiers (ORDER BY, LIMIT)
 - Persistent RL agent
 - Model management
 
-### v0.2.0 ✅
+### v0.2.0
 - WHERE clause filtering
 - Natural language queries (ASK)
 - Reinforcement learning
 - Expression evaluator
 
-### v0.1.0 ✅
+### v0.1.0
 - Initial SQL support
 - Semantic caching
 - Self-optimizing execution
