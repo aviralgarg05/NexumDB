@@ -103,6 +103,17 @@ class SemanticCache:
         query_vec = self.vectorize(query)
         current_time = time.time()
 
+        # Check for existing similar entry and update instead of duplicating
+        for entry in self.cache:
+            similarity = self.cosine_similarity(query_vec, entry['vector'])
+            if similarity >= self.similarity_threshold:
+                # Update existing entry instead of creating duplicate
+                entry['result'] = result
+                entry['last_access'] = current_time
+                print(f"Updated existing cache entry (similarity: {similarity:.4f})")
+                return
+
+        # No similar entry found, add new one
         self.cache.append({
             'query': query,
             'vector': query_vec,
@@ -238,7 +249,7 @@ class SemanticCache:
             # Create backup of existing cache
             backup_path = f"{filepath}.backup"
             if os.path.exists(filepath):
-                os.rename(filepath, backup_path)
+                os.replace(filepath, backup_path)
             
             cache_data = {
                 'cache': self.cache,
@@ -266,7 +277,7 @@ class SemanticCache:
             print(f"Error saving cache to JSON: {e}")
             # Restore backup if save failed
             if os.path.exists(backup_path):
-                os.rename(backup_path, filepath)
+                os.replace(backup_path, filepath)
     
     def load_cache_json(self, filepath: Optional[str] = None) -> None:
         """Load cache from JSON format with backward compatibility for legacy entries"""
@@ -298,6 +309,10 @@ class SemanticCache:
                         entry['last_access'] = current_time
                     if 'created_at' not in entry:
                         entry['created_at'] = current_time
+                
+                # Enforce max cache size immediately after loading
+                while len(self.cache) > self.max_cache_size:
+                    self._evict_lru()
                 
                 print(f"Semantic cache loaded from JSON: {filepath} ({len(self.cache)} entries)")
                 
@@ -710,7 +725,7 @@ def test_cache_persistence() -> Dict[str, Any]:
     
     # Test 5: Test cache optimization
     print("\n5. Testing cache optimization...")
-    cache2.optimize_cache(max_entries=2)
+    cache2.optimize_cache(new_max_size=2)
     
     # Cleanup
     print("\n6. Cleaning up test files...")
