@@ -1,3 +1,5 @@
+[![CI](https://github.com/aviralgarg05/NexumDB/actions/workflows/ci.yml/badge.svg)](https://github.com/aviralgarg05/NexumDB/actions/workflows/ci.yml)
+
 # NexumDB - AI-Native Database
 
 An innovative, open-source database that combines traditional SQL with AI-powered features including advanced query operators, natural language processing, semantic caching, and reinforcement learning-based query optimization.
@@ -57,6 +59,39 @@ export PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1
 cargo build --release
 ```
 
+## Build, run and stop the application using docker compose
+
+### Build the application
+
+```bash
+$ docker compose build
+```
+
+### Run the application
+
+```bash
+$ docker compose up
+```
+
+### Run an interactive shell
+
+```bash
+$ docker compose up -d
+$ docker exec -it nexumdb nexum
+```
+ 
+### Stop the application 
+
+```bash
+$ docker compose down
+```
+
+### Logs 
+
+```bash 
+$ docker compose logs
+```
+
 ## Python Dependencies
 
 ```bash
@@ -113,6 +148,176 @@ WHERE price BETWEEN 100 AND 500
 ORDER BY price DESC 
 LIMIT 10;
 ```
+
+#### Advanced SQL Operator Examples (Detailed)
+
+Below are practical, runnable examples with expected outputs.
+
+---
+
+##### 1️⃣ LIKE Operator – Pattern Matching
+
+```sql
+CREATE TABLE users (id INTEGER, name TEXT, age INTEGER);
+
+INSERT INTO users (id, name, age) VALUES
+(1, 'Alice', 30),
+(2, 'Bob', 25),
+(3, 'Andrew', 22),
+(4, 'Anita', 28);
+```
+
+**Starts with 'A':**
+
+```sql
+SELECT * FROM users WHERE name LIKE 'A%';
+```
+
+Expected Output:
+
+```
+id | name    | age
+--------------------
+1  | Alice   | 30
+3  | Andrew  | 22
+4  | Anita   | 28
+```
+
+**Contains 'li':**
+
+```sql
+SELECT * FROM users WHERE name LIKE '%li%';
+```
+
+Expected Output:
+
+```
+id | name   | age
+-------------------
+1  | Alice  | 30
+```
+
+---
+
+##### 2️⃣ IN Operator – List Membership
+
+**Numeric IN:**
+
+```sql
+SELECT * FROM users WHERE id IN (1, 3);
+```
+
+Expected Output:
+
+```
+id | name    | age
+--------------------
+1  | Alice   | 30
+3  | Andrew  | 22
+```
+
+**String IN:**
+
+```sql
+SELECT * FROM users WHERE name IN ('Alice', 'Bob');
+```
+
+Expected Output:
+
+```
+id | name   | age
+-------------------
+1  | Alice  | 30
+2  | Bob    | 25
+```
+
+---
+
+##### 3️⃣ BETWEEN Operator – Range Queries
+
+**Number Range:**
+
+```sql
+SELECT * FROM users WHERE age BETWEEN 25 AND 30;
+```
+
+Expected Output:
+
+```
+id | name   | age
+-------------------
+1  | Alice  | 30
+2  | Bob    | 25
+4  | Anita  | 28
+```
+
+**Date Range Example:**
+
+```sql
+CREATE TABLE orders (id INTEGER, order_date TEXT);
+
+INSERT INTO orders (id, order_date) VALUES
+(1, '2024-01-10'),
+(2, '2024-02-05'),
+(3, '2024-01-20');
+
+SELECT * FROM orders
+WHERE order_date BETWEEN '2024-01-01' AND '2024-01-31';
+```
+
+Expected Output:
+
+```
+id | order_date
+----------------
+1  | 2024-01-10
+3  | 2024-01-20
+```
+
+---
+
+##### 4️⃣ ORDER BY with Multiple Columns
+
+```sql
+SELECT * FROM users
+ORDER BY age DESC, name ASC;
+```
+
+Expected Output:
+
+```
+id | name    | age
+--------------------
+1  | Alice   | 30
+4  | Anita   | 28
+2  | Bob     | 25
+3  | Andrew  | 22
+```
+
+---
+
+##### 5️⃣ Combining Multiple Operators
+
+```sql
+SELECT * FROM users
+WHERE name LIKE 'A%'
+  AND age BETWEEN 20 AND 30
+  AND id IN (1, 3, 4)
+ORDER BY age DESC
+LIMIT 2;
+```
+
+Expected Output:
+
+```
+id | name   | age
+-------------------
+1  | Alice  | 30
+4  | Anita  | 28
+```
+
+---
+
 
 ### Natural Language Queries (v0.2.0+)
 
