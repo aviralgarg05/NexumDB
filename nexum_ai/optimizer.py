@@ -15,9 +15,18 @@ class SemanticCache:
     Uses local embedding models only
     Supports persistence to disk via JSON or pickle files
     Implements automatic memory management with configurable max size
+    
+    Note: Statistics (hits, misses, evictions) are initialized to 0 on construction,
+    then overwritten by persisted values if a cache file exists. To reset statistics
+    while preserving cache entries, call get_cache_stats() and manually restore them
+    after initialization.
     """
     
     def __init__(self, similarity_threshold: float = 0.95, cache_file: str = "semantic_cache.pkl", max_cache_size: int = 1000) -> None:
+        # Validate max_cache_size
+        if max_cache_size < 0:
+            raise ValueError(f"max_cache_size must be non-negative, got {max_cache_size}")
+        
         self.cache: List[Dict] = []
         self.similarity_threshold = similarity_threshold
         self.model = None
@@ -29,12 +38,20 @@ class SemanticCache:
         
         self.cache_dir = Path("cache")
         self.cache_dir.mkdir(exist_ok=True)
-        self.cache_path = self.cache_dir / self.cache_file
         
-        # Statistics
+        # Always use JSON extension for cache_path (actual persistence format)
+        json_filename = cache_file_env.replace('.pkl', '.json') if cache_file_env.endswith('.pkl') else cache_file_env
+        self.cache_path = self.cache_dir / json_filename
+        
+        # Statistics (may be overwritten by load_cache if persisted file exists)
         self.hits = 0
         self.misses = 0
         self.evictions = 0
+        
+        # Dirty flag for deferred persistence
+        self._dirty = False
+        self._last_save_time = time.time()
+        self._auto_save_interval = 60.0  # Auto-save every 60 seconds if dirty
         
         # Load existing cache on initialization
         self.load_cache()
@@ -126,7 +143,18 @@ class SemanticCache:
         while len(self.cache) > self.max_cache_size:
             self._evict_lru()
         
+        self._dirty = True
+        self._maybe_auto_save()
+        
         print(f"Cached query: {query[:50]}... (cache size: {len(self.cache)}/{self.max_cache_size})")
+    
+    def _maybe_auto_save(self) -> None:
+        """Auto-save cache if dirty and enough time has passed"""
+        if self._dirty and (time.time() - self._last_save_time) > self._auto_save_interval:
+            self.save_cache()
+            self._dirty = False
+            self._last_save_time = time.time()
+            print("Auto-saved cache to disk")
     
     def _evict_lru(self) -> None:
         """Evict least recently used cache entry"""
@@ -166,6 +194,8 @@ class SemanticCache:
         # Use JSON format by default for security
         json_filepath = filepath.replace('.pkl', '.json') if filepath.endswith('.pkl') else filepath
         self.save_cache_json(json_filepath)
+        self._dirty = False
+        self._last_save_time = time.time()
     
     def load_cache(self, filepath: Optional[str] = None) -> None:
         """Load cache from disk using JSON (safe) or pickle (legacy)"""
@@ -397,6 +427,9 @@ class SemanticCache:
     def optimize_cache(self, new_max_size: Optional[int] = None) -> None:
         """Adjust cache size or manually trigger LRU eviction"""
         if new_max_size is not None:
+            # Validate new_max_size
+            if new_max_size < 0:
+                raise ValueError(f"new_max_size must be non-negative, got {new_max_size}")
             self.max_cache_size = new_max_size
             print(f"Cache max size updated to {new_max_size}")
         
