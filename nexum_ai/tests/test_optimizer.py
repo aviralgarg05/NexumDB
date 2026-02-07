@@ -117,23 +117,23 @@ class TestSemanticCache:
         """Test that LRU eviction kicks in when cache is full"""
         cache = SemanticCache(similarity_threshold=0.95, max_cache_size=3)
         
-        # Add 3 entries (fill cache)
-        cache.put("query1", "result1")
-        cache.put("query2", "result2")
-        cache.put("query3", "result3")
+        # Add 3 entries (fill cache) - use completely different strings to avoid collisions
+        cache.put("SELECT * FROM users WHERE age > 25", "result1")
+        cache.put("INSERT INTO products (name, price) VALUES ('Widget', 99.99)", "result2")
+        cache.put("DELETE FROM orders WHERE status = 'cancelled' AND created_at < '2023-01-01'", "result3")
         assert len(cache.cache) == 3
         
-        # Add 4th entry - should evict oldest (query1)
-        cache.put("query4", "result4")
+        # Add 4th entry - should evict oldest (first query)
+        cache.put("UPDATE inventory SET quantity = quantity - 1 WHERE product_id = 42", "result4")
         assert len(cache.cache) == 3
         assert cache.evictions == 1
         
-        # Verify query1 was evicted (won't be found)
+        # Verify first query was evicted (won't be found)
         queries_in_cache = [entry['query'] for entry in cache.cache]
-        assert "query1" not in queries_in_cache
-        assert "query2" in queries_in_cache
-        assert "query3" in queries_in_cache
-        assert "query4" in queries_in_cache
+        assert "SELECT * FROM users WHERE age > 25" not in queries_in_cache
+        assert "INSERT INTO products (name, price) VALUES ('Widget', 99.99)" in queries_in_cache
+        assert "DELETE FROM orders WHERE status = 'cancelled' AND created_at < '2023-01-01'" in queries_in_cache
+        assert "UPDATE inventory SET quantity = quantity - 1 WHERE product_id = 42" in queries_in_cache
     
     def test_lru_updates_on_access(self):
         """Test that accessing an entry updates its LRU timestamp"""
@@ -141,39 +141,39 @@ class TestSemanticCache:
         
         cache = SemanticCache(similarity_threshold=0.95, max_cache_size=2)
         
-        # Add 2 entries
-        cache.put("query1", "result1")
+        # Add 2 entries - use completely different strings
+        cache.put("SELECT COUNT(*) FROM customers WHERE country = 'USA'", "result1")
         time.sleep(0.01)
-        cache.put("query2", "result2")
+        cache.put("INSERT INTO logs (message, level) VALUES ('System started', 'INFO')", "result2")
         time.sleep(0.01)
         
-        # Access query1 (should update its timestamp)
-        result = cache.get("query1")
+        # Access first query (should update its timestamp)
+        result = cache.get("SELECT COUNT(*) FROM customers WHERE country = 'USA'")
         assert result == "result1"
         time.sleep(0.01)
         
-        # Add 3rd entry - should evict query2 (oldest), not query1
-        cache.put("query3", "result3")
+        # Add 3rd entry - should evict second query (oldest), not first
+        cache.put("DELETE FROM temp_files WHERE created_at < NOW() - INTERVAL '7 days'", "result3")
         assert len(cache.cache) == 2
         
         queries_in_cache = [entry['query'] for entry in cache.cache]
-        assert "query1" in queries_in_cache  # Was accessed recently
-        assert "query2" not in queries_in_cache  # Should be evicted
-        assert "query3" in queries_in_cache
+        assert "SELECT COUNT(*) FROM customers WHERE country = 'USA'" in queries_in_cache  # Was accessed recently
+        assert "INSERT INTO logs (message, level) VALUES ('System started', 'INFO')" not in queries_in_cache  # Should be evicted
+        assert "DELETE FROM temp_files WHERE created_at < NOW() - INTERVAL '7 days'" in queries_in_cache
     
     def test_cache_stats_tracking(self):
         """Test that cache statistics are tracked correctly"""
         cache = SemanticCache(similarity_threshold=0.95, max_cache_size=5)
         
-        # Add entries
-        cache.put("query1", "result1")
-        cache.put("query2", "result2")
+        # Add entries - use completely different strings
+        cache.put("SELECT * FROM products WHERE category = 'Electronics'", "result1")
+        cache.put("UPDATE users SET last_login = NOW() WHERE user_id = 123", "result2")
         
         # Cache hit
-        cache.get("query1")
+        cache.get("SELECT * FROM products WHERE category = 'Electronics'")
         
-        # Cache miss
-        cache.get("query3")
+        # Cache miss - completely different query
+        cache.get("CREATE TABLE new_table (id INT PRIMARY KEY, name VARCHAR(255))")
         
         stats = cache.get_cache_stats()
         assert stats['total_entries'] == 2
@@ -187,9 +187,12 @@ class TestSemanticCache:
         """Test manually resizing cache with optimize_cache"""
         cache = SemanticCache(similarity_threshold=0.95, max_cache_size=10)
         
-        # Add 5 entries
-        for i in range(5):
-            cache.put(f"query{i}", f"result{i}")
+        # Add 5 entries - use very different SQL commands
+        cache.put("SELECT employee_id, name FROM employees WHERE department = 'Sales'", "result0")
+        cache.put("INSERT INTO audit_log (action, timestamp) VALUES ('LOGIN', NOW())", "result1")
+        cache.put("DELETE FROM expired_sessions WHERE last_activity < NOW() - INTERVAL '1 hour'", "result2")
+        cache.put("UPDATE inventory SET stock_level = stock_level + 100 WHERE warehouse_id = 5", "result3")
+        cache.put("CREATE INDEX idx_customer_email ON customers(email) WHERE active = true", "result4")
         
         assert len(cache.cache) == 5
         
@@ -207,6 +210,19 @@ class TestSemanticCache:
         cache.put("query1", "result1")
         assert len(cache.cache) == 0
         assert cache.evictions == 1
+    
+    def test_negative_max_cache_size_raises_error(self):
+        """Test that negative max_cache_size raises ValueError"""
+        import pytest
+        with pytest.raises(ValueError, match="max_cache_size must be non-negative"):
+            SemanticCache(similarity_threshold=0.95, max_cache_size=-1)
+    
+    def test_negative_new_max_size_raises_error(self):
+        """Test that negative new_max_size in optimize_cache raises ValueError"""
+        import pytest
+        cache = SemanticCache(similarity_threshold=0.95, max_cache_size=10)
+        with pytest.raises(ValueError, match="new_max_size must be non-negative"):
+            cache.optimize_cache(new_max_size=-5)
 
 
 class TestQueryOptimizer:
