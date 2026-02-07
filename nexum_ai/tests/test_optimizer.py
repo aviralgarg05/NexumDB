@@ -112,6 +112,101 @@ class TestSemanticCache:
             cache.put(query, result)
         
         assert len(cache.cache) == 3
+    
+    def test_lru_eviction_on_cache_full(self):
+        """Test that LRU eviction kicks in when cache is full"""
+        cache = SemanticCache(similarity_threshold=0.95, max_cache_size=3)
+        
+        # Add 3 entries (fill cache)
+        cache.put("query1", "result1")
+        cache.put("query2", "result2")
+        cache.put("query3", "result3")
+        assert len(cache.cache) == 3
+        
+        # Add 4th entry - should evict oldest (query1)
+        cache.put("query4", "result4")
+        assert len(cache.cache) == 3
+        assert cache.evictions == 1
+        
+        # Verify query1 was evicted (won't be found)
+        queries_in_cache = [entry['query'] for entry in cache.cache]
+        assert "query1" not in queries_in_cache
+        assert "query2" in queries_in_cache
+        assert "query3" in queries_in_cache
+        assert "query4" in queries_in_cache
+    
+    def test_lru_updates_on_access(self):
+        """Test that accessing an entry updates its LRU timestamp"""
+        import time
+        
+        cache = SemanticCache(similarity_threshold=0.95, max_cache_size=2)
+        
+        # Add 2 entries
+        cache.put("query1", "result1")
+        time.sleep(0.01)
+        cache.put("query2", "result2")
+        time.sleep(0.01)
+        
+        # Access query1 (should update its timestamp)
+        result = cache.get("query1")
+        assert result == "result1"
+        time.sleep(0.01)
+        
+        # Add 3rd entry - should evict query2 (oldest), not query1
+        cache.put("query3", "result3")
+        assert len(cache.cache) == 2
+        
+        queries_in_cache = [entry['query'] for entry in cache.cache]
+        assert "query1" in queries_in_cache  # Was accessed recently
+        assert "query2" not in queries_in_cache  # Should be evicted
+        assert "query3" in queries_in_cache
+    
+    def test_cache_stats_tracking(self):
+        """Test that cache statistics are tracked correctly"""
+        cache = SemanticCache(similarity_threshold=0.95, max_cache_size=5)
+        
+        # Add entries
+        cache.put("query1", "result1")
+        cache.put("query2", "result2")
+        
+        # Cache hit
+        cache.get("query1")
+        
+        # Cache miss
+        cache.get("query3")
+        
+        stats = cache.get_cache_stats()
+        assert stats['total_entries'] == 2
+        assert stats['max_cache_size'] == 5
+        assert stats['hits'] == 1
+        assert stats['misses'] == 1
+        assert stats['evictions'] == 0
+        assert stats['hit_rate'] == 0.5
+    
+    def test_optimize_cache_manual_resize(self):
+        """Test manually resizing cache with optimize_cache"""
+        cache = SemanticCache(similarity_threshold=0.95, max_cache_size=10)
+        
+        # Add 5 entries
+        for i in range(5):
+            cache.put(f"query{i}", f"result{i}")
+        
+        assert len(cache.cache) == 5
+        
+        # Resize to smaller cache
+        cache.optimize_cache(new_max_size=3)
+        assert cache.max_cache_size == 3
+        assert len(cache.cache) == 3
+        assert cache.evictions == 2
+    
+    def test_cache_size_zero_max(self):
+        """Test cache behavior with max_cache_size = 0"""
+        cache = SemanticCache(similarity_threshold=0.95, max_cache_size=0)
+        
+        # Should not be able to add any entries
+        cache.put("query1", "result1")
+        assert len(cache.cache) == 0
+        assert cache.evictions == 1
 
 
 class TestQueryOptimizer:
