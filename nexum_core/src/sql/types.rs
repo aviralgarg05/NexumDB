@@ -44,6 +44,12 @@ pub struct TableSchema {
 }
 
 #[derive(Debug, Clone)]
+pub enum SelectItem {
+    Wildcard,
+    Column { name: String, alias: Option<String> },
+}
+
+#[derive(Debug, Clone)]
 pub struct OrderByClause {
     pub column: String,
     pub ascending: bool,
@@ -62,9 +68,26 @@ pub enum Statement {
     },
     Select {
         table: String,
-        columns: Vec<String>,
+        projection: Vec<SelectItem>,
         where_clause: Option<Box<Expr>>,
         order_by: Option<Vec<OrderByClause>>,
         limit: Option<usize>,
+    },
+    ShowTables,
+    DescribeTable {
+        name: String,
+    },
+    DropTable {
+        name: String,
+        if_exists: bool,
+    },
+    Delete {
+        table: String,
+        where_clause: Option<Box<Expr>>,
+    },
+    Update {
+        table: String,
+        assignments: Vec<(String, Value)>,
+        where_clause: Option<Box<Expr>>,
     },
 }

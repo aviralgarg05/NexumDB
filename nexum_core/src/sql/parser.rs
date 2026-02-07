@@ -1,4 +1,4 @@
-use super::types::{Column, DataType, Statement, Value};
+use super::types::{Column, DataType, SelectItem, Statement, Value};
 use anyhow::{anyhow, Result};
 use sqlparser::ast::{self, ColumnDef, DataType as SqlDataType, Expr, Statement as SqlStatement};
 use sqlparser::dialect::GenericDialect;
@@ -8,8 +8,17 @@ pub struct Parser;
 
 impl Parser {
     pub fn parse(sql: &str) -> Result<Statement> {
+        let trimmed = sql.trim().trim_end_matches(';').trim();
+        if trimmed.is_empty() {
+            return Err(anyhow!("No statements found"));
+        }
+
+        if let Some(statement) = Self::parse_management_statement(trimmed)? {
+            return Ok(statement);
+        }
+
         let dialect = GenericDialect {};
-        let statements = SqlParser::parse_sql(&dialect, sql)?;
+        let statements = SqlParser::parse_sql(&dialect, trimmed)?;
 
         if statements.is_empty() {
             return Err(anyhow!("No statements found"));
@@ -61,6 +70,52 @@ impl Parser {
                     values,
                 })
             }
+            SqlStatement::Update {
+                table,
+                assignments,
+                selection,
+                ..
+            } => {
+                let table_name = table.to_string();
+
+                let assignment_pairs = assignments
+                    .iter()
+                    .map(|assign| {
+                        let col_name = assign
+                            .id
+                            .iter()
+                            .map(|i| i.value.clone())
+                            .collect::<Vec<_>>()
+                            .join(".");
+                        let value = Self::convert_expr(&assign.value)?;
+                        Ok((col_name, value))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+
+                let where_clause = selection.as_ref().map(|expr| Box::new(expr.clone()));
+
+                Ok(Statement::Update {
+                    table: table_name,
+                    assignments: assignment_pairs,
+                    where_clause,
+                })
+            }
+            SqlStatement::Delete {
+                from, selection, ..
+            } => {
+                let table = if let Some(from_clause) = from.first() {
+                    from_clause.relation.to_string()
+                } else {
+                    return Err(anyhow!("DELETE requires a table name"));
+                };
+
+                let where_clause = selection.as_ref().map(|expr| Box::new(expr.clone()));
+
+                Ok(Statement::Delete {
+                    table,
+                    where_clause,
+                })
+            }
             SqlStatement::Query(query) => {
                 if let ast::SetExpr::Select(select) = &*query.body {
                     let table =
@@ -74,16 +129,28 @@ impl Parser {
                             return Err(anyhow!("No table specified"));
                         };
 
-                    let columns = select
+                    let projection = select
                         .projection
                         .iter()
                         .map(|proj| match proj {
-                            ast::SelectItem::Wildcard(_) => "*".to_string(),
-                            ast::SelectItem::UnnamedExpr(expr) => format!("{}", expr),
-                            ast::SelectItem::ExprWithAlias { expr: _, alias } => alias.to_string(),
-                            _ => "unknown".to_string(),
+                            ast::SelectItem::Wildcard(_) => Ok(SelectItem::Wildcard),
+                            ast::SelectItem::UnnamedExpr(expr) => match expr {
+                                Expr::Identifier(ident) => Ok(SelectItem::Column {
+                                    name: ident.value.clone(),
+                                    alias: None,
+                                }),
+                                _ => Err(anyhow!("Unsupported select expression: {}", expr)),
+                            },
+                            ast::SelectItem::ExprWithAlias { expr, alias } => match expr {
+                                Expr::Identifier(ident) => Ok(SelectItem::Column {
+                                    name: ident.value.clone(),
+                                    alias: Some(alias.value.clone()),
+                                }),
+                                _ => Err(anyhow!("Unsupported select expression: {}", expr)),
+                            },
+                            _ => Err(anyhow!("Unsupported select item")),
                         })
-                        .collect();
+                        .collect::<Result<Vec<_>>>()?;
 
                     let where_clause = select.selection.as_ref().map(|expr| Box::new(expr.clone()));
 
@@ -93,11 +160,19 @@ impl Parser {
                                 .order_by
                                 .iter()
                                 .map(|order| {
-                                    let column = format!("{}", order.expr);
+                                    let column = match &order.expr {
+                                        Expr::Identifier(ident) => ident.value.clone(),
+                                        _ => {
+                                            return Err(anyhow!(
+                                                "Unsupported ORDER BY expression: {}",
+                                                order.expr
+                                            ))
+                                        }
+                                    };
                                     let ascending = order.asc.unwrap_or(true);
-                                    crate::sql::types::OrderByClause { column, ascending }
+                                    Ok(crate::sql::types::OrderByClause { column, ascending })
                                 })
-                                .collect(),
+                                .collect::<Result<Vec<_>>>()?,
                         )
                     } else {
                         None
@@ -113,7 +188,7 @@ impl Parser {
 
                     Ok(Statement::Select {
                         table,
-                        columns,
+                        projection,
                         where_clause,
                         order_by,
                         limit,
@@ -124,6 +199,66 @@ impl Parser {
             }
             _ => Err(anyhow!("Unsupported statement type")),
         }
+    }
+
+    fn parse_management_statement(sql: &str) -> Result<Option<Statement>> {
+        let tokens: Vec<&str> = sql.split_whitespace().collect();
+        if tokens.is_empty() {
+            return Ok(None);
+        }
+
+        if tokens.len() == 2
+            && tokens[0].eq_ignore_ascii_case("show")
+            && tokens[1].eq_ignore_ascii_case("tables")
+        {
+            return Ok(Some(Statement::ShowTables));
+        }
+
+        if tokens.len() == 2 && tokens[0].eq_ignore_ascii_case("describe") {
+            let table = Self::clean_identifier(tokens[1]);
+            return Ok(Some(Statement::DescribeTable { name: table }));
+        }
+
+        if tokens.len() == 3
+            && tokens[0].eq_ignore_ascii_case("drop")
+            && tokens[1].eq_ignore_ascii_case("table")
+        {
+            let table = Self::clean_identifier(tokens[2]);
+            return Ok(Some(Statement::DropTable {
+                name: table,
+                if_exists: false,
+            }));
+        }
+
+        if tokens.len() == 5
+            && tokens[0].eq_ignore_ascii_case("drop")
+            && tokens[1].eq_ignore_ascii_case("table")
+            && tokens[2].eq_ignore_ascii_case("if")
+            && tokens[3].eq_ignore_ascii_case("exists")
+        {
+            let table = Self::clean_identifier(tokens[4]);
+            return Ok(Some(Statement::DropTable {
+                name: table,
+                if_exists: true,
+            }));
+        }
+
+        Ok(None)
+    }
+
+    fn clean_identifier(raw: &str) -> String {
+        let trimmed = raw.trim();
+        if trimmed.len() >= 2 {
+            let first = trimmed.chars().next().unwrap();
+            let last = trimmed.chars().last().unwrap();
+            if (first == '`' && last == '`')
+                || (first == '"' && last == '"')
+                || (first == '\'' && last == '\'')
+            {
+                return trimmed[1..trimmed.len() - 1].to_string();
+            }
+        }
+        trimmed.to_string()
     }
 
     fn convert_column(col: &ColumnDef) -> Result<Column> {
@@ -210,11 +345,187 @@ mod tests {
         let stmt = Parser::parse(sql).unwrap();
 
         match stmt {
-            Statement::Select { table, columns, .. } => {
+            Statement::Select {
+                table, projection, ..
+            } => {
                 assert_eq!(table, "users");
-                assert_eq!(columns.len(), 2);
+                assert_eq!(projection.len(), 2);
             }
             _ => panic!("Expected Select statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_select_wildcard() {
+        let sql = "SELECT * FROM users";
+        let stmt = Parser::parse(sql).unwrap();
+
+        match stmt {
+            Statement::Select { projection, .. } => {
+                assert_eq!(projection.len(), 1);
+                match &projection[0] {
+                    SelectItem::Wildcard => {}
+                    _ => panic!("Expected wildcard projection"),
+                }
+            }
+            _ => panic!("Expected Select statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_select_alias() {
+        let sql = "SELECT name AS username FROM users";
+        let stmt = Parser::parse(sql).unwrap();
+
+        match stmt {
+            Statement::Select { projection, .. } => {
+                assert_eq!(projection.len(), 1);
+                match &projection[0] {
+                    SelectItem::Column { name, alias } => {
+                        assert_eq!(name, "name");
+                        assert_eq!(alias.as_deref(), Some("username"));
+                    }
+                    _ => panic!("Expected column projection"),
+                }
+            }
+            _ => panic!("Expected Select statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_update_single_column() {
+        let sql = "UPDATE users SET name = 'Bob' WHERE id = 1";
+        let stmt = Parser::parse(sql).unwrap();
+
+        match stmt {
+            Statement::Update {
+                table,
+                assignments,
+                where_clause,
+            } => {
+                assert_eq!(table, "users");
+                assert_eq!(assignments.len(), 1);
+                assert_eq!(assignments[0].0, "name");
+                assert_eq!(assignments[0].1, Value::Text("Bob".to_string()));
+                assert!(where_clause.is_some());
+            }
+            _ => panic!("Expected Update statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_delete_with_where() {
+        let sql = "DELETE FROM users WHERE id = 1";
+        let stmt = Parser::parse(sql).unwrap();
+
+        match stmt {
+            Statement::Delete {
+                table,
+                where_clause,
+            } => {
+                assert_eq!(table, "users");
+                assert!(where_clause.is_some());
+            }
+            _ => panic!("Expected Delete statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_update_multiple_columns() {
+        let sql = "UPDATE users SET name = 'Bob', age = 30 WHERE id = 1";
+        let stmt = Parser::parse(sql).unwrap();
+
+        match stmt {
+            Statement::Update {
+                table,
+                assignments,
+                where_clause,
+            } => {
+                assert_eq!(table, "users");
+                assert_eq!(assignments.len(), 2);
+                assert_eq!(assignments[0].0, "name");
+                assert_eq!(assignments[0].1, Value::Text("Bob".to_string()));
+                assert_eq!(assignments[1].0, "age");
+                assert_eq!(assignments[1].1, Value::Integer(30));
+                assert!(where_clause.is_some());
+            }
+            _ => panic!("Expected Update statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_update_without_where() {
+        let sql = "UPDATE users SET active = true";
+        let stmt = Parser::parse(sql).unwrap();
+
+        match stmt {
+            Statement::Update {
+                table,
+                assignments,
+                where_clause,
+            } => {
+                assert_eq!(table, "users");
+                assert_eq!(assignments.len(), 1);
+                assert_eq!(assignments[0].0, "active");
+                assert_eq!(assignments[0].1, Value::Boolean(true));
+                assert!(where_clause.is_none());
+            }
+            _ => panic!("Expected Update statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_delete_without_where() {
+        let sql = "DELETE FROM users";
+        let stmt = Parser::parse(sql).unwrap();
+
+        match stmt {
+            Statement::Delete {
+                table,
+                where_clause,
+            } => {
+                assert_eq!(table, "users");
+                assert!(where_clause.is_none());
+            }
+            _ => panic!("Expected Delete statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_show_tables() {
+        let sql = "SHOW TABLES";
+        let stmt = Parser::parse(sql).unwrap();
+
+        match stmt {
+            Statement::ShowTables => {}
+            _ => panic!("Expected ShowTables statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_describe_table() {
+        let sql = "DESCRIBE users";
+        let stmt = Parser::parse(sql).unwrap();
+
+        match stmt {
+            Statement::DescribeTable { name } => {
+                assert_eq!(name, "users");
+            }
+            _ => panic!("Expected DescribeTable statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_drop_table_if_exists() {
+        let sql = "DROP TABLE IF EXISTS users";
+        let stmt = Parser::parse(sql).unwrap();
+
+        match stmt {
+            Statement::DropTable { name, if_exists } => {
+                assert_eq!(name, "users");
+                assert!(if_exists);
+            }
+            _ => panic!("Expected DropTable statement"),
         }
     }
 }

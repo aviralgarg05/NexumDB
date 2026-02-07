@@ -6,7 +6,11 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to file a bug report.
+        Thanks for taking the time to file a bug report! 🚀
+        
+        **OSCG'26 Contributors**: This project participates in the Open Source Contributor Games 2026.
+        High-quality contributions are rewarded with points, recognition, and networking opportunities.
+        Please ensure your report follows our [quality standards](../CONTRIBUTING.md) for maximum impact.
 
   - type: textarea
     id: summary
@@ -66,10 +70,16 @@ body:
       render: shell
 
   - type: checkboxes
-    id: terms
+    id: quality_standards
     attributes:
-      label: Code of Conduct
-      description: By submitting this issue, you agree to follow our Code of Conduct.
+      label: Quality Standards & Code of Conduct
+      description: By submitting this issue, you agree to our standards and conduct expectations.
       options:
+        - label: I have searched existing issues to avoid duplicates
+          required: true
+        - label: I have provided clear, reproducible steps
+          required: true
         - label: I agree to follow this project's Code of Conduct
+          required: true
+        - label: I understand this project participates in OSCG'26 quality standards
           required: true

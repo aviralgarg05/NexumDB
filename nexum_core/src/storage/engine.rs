@@ -2,6 +2,7 @@ use super::{Result, StorageError};
 use sled::Db;
 use std::path::Path;
 
+#[derive(Clone)]
 pub struct StorageEngine {
     db: Db,
 }
@@ -35,6 +36,16 @@ impl StorageEngine {
 
     pub fn delete(&self, key: &[u8]) -> Result<()> {
         self.db.remove(key)?;
+        Ok(())
+    }
+
+    pub fn batch_set(&self, operations: Vec<(Vec<u8>, Vec<u8>)>) -> Result<()> {
+        let mut batch = sled::Batch::default();
+        for (key, value) in operations {
+            batch.insert(key, value);
+        }
+        self.db.apply_batch(batch)?;
+        self.db.flush()?;
         Ok(())
     }
 
@@ -104,5 +115,23 @@ mod tests {
 
         let users = engine.scan_prefix(b"user:").unwrap();
         assert_eq!(users.len(), 2);
+    }
+
+    #[test]
+    fn test_batch_set() {
+        let engine = StorageEngine::memory().unwrap();
+
+        let operations = vec![
+            (b"batch:1".to_vec(), b"value1".to_vec()),
+            (b"batch:2".to_vec(), b"value2".to_vec()),
+            (b"batch:3".to_vec(), b"value3".to_vec()),
+        ];
+
+        engine.batch_set(operations).unwrap();
+
+        // Verify all values were set
+        assert_eq!(engine.get(b"batch:1").unwrap().unwrap(), b"value1");
+        assert_eq!(engine.get(b"batch:2").unwrap().unwrap(), b"value2");
+        assert_eq!(engine.get(b"batch:3").unwrap().unwrap(), b"value3");
     }
 }

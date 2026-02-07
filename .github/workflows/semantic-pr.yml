@@ -1,0 +1,52 @@
+name: "Semantic PR Title"
+
+on:
+    pull_request_target:
+        types: [opened, edited, synchronize, reopened]
+
+permissions:
+    pull-requests: write
+    statuses: write
+
+jobs:
+    check-title:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Check PR title
+              uses: amannn/action-semantic-pull-request@v5
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  types: |
+                      feat
+                      fix
+                      docs
+                      style
+                      refactor
+                      perf
+                      test
+                      build
+                      ci
+                      chore
+                      revert
+                  scopes: |
+                      core
+                      cli
+                      ai
+                      storage
+                      sql
+                      executor
+                      bridge
+                      tests
+                      deps
+                      ci
+                  requireScope: false
+                  subjectPattern: ^(?![A-Z]).+$
+                  subjectPatternError: |
+                      The subject "{subject}" found in the pull request title "{title}"
+                      didn't match the configured pattern. Please ensure that the subject
+                      doesn't start with an uppercase character.
+                  validateSingleCommit: false
+                  ignoreLabels: |
+                      dependencies
+                      skip-changelog

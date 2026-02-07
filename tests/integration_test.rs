@@ -81,3 +81,65 @@ fn test_between_with_order_limit() {
         _ => panic!("Expected Selected result"),
     }
 }
+
+#[test]
+fn test_table_lifecycle_and_projection() {
+    let storage = StorageEngine::memory().unwrap();
+    let executor = Executor::new(storage);
+
+    let create = Parser::parse("CREATE TABLE users (id INTEGER, name TEXT, age INTEGER)").unwrap();
+    executor.execute(create).unwrap();
+
+    let insert =
+        Parser::parse("INSERT INTO users (name, id) VALUES ('Alice', 1), ('Bob', 2)").unwrap();
+    executor.execute(insert).unwrap();
+
+    let select = Parser::parse("SELECT name AS display_name FROM users ORDER BY id ASC").unwrap();
+    let result = executor.execute(select).unwrap();
+    match result {
+        nexum_core::executor::ExecutionResult::Selected { rows, columns } => {
+            assert_eq!(columns, vec!["display_name".to_string()]);
+            assert_eq!(rows.len(), 2);
+            assert_eq!(
+                rows[0].values[0],
+                nexum_core::sql::types::Value::Text("Alice".to_string())
+            );
+            assert_eq!(
+                rows[1].values[0],
+                nexum_core::sql::types::Value::Text("Bob".to_string())
+            );
+        }
+        _ => panic!("Expected Selected result"),
+    }
+
+    let show = Parser::parse("SHOW TABLES").unwrap();
+    let result = executor.execute(show).unwrap();
+    match result {
+        nexum_core::executor::ExecutionResult::TableList { tables } => {
+            assert_eq!(tables, vec!["users".to_string()]);
+        }
+        _ => panic!("Expected TableList result"),
+    }
+
+    let describe = Parser::parse("DESCRIBE users").unwrap();
+    let result = executor.execute(describe).unwrap();
+    match result {
+        nexum_core::executor::ExecutionResult::TableDescription { table, columns } => {
+            assert_eq!(table, "users");
+            assert_eq!(columns.len(), 3);
+        }
+        _ => panic!("Expected TableDescription result"),
+    }
+
+    let drop = Parser::parse("DROP TABLE users").unwrap();
+    executor.execute(drop).unwrap();
+
+    let show = Parser::parse("SHOW TABLES").unwrap();
+    let result = executor.execute(show).unwrap();
+    match result {
+        nexum_core::executor::ExecutionResult::TableList { tables } => {
+            assert!(tables.is_empty());
+        }
+        _ => panic!("Expected TableList result"),
+    }
+}

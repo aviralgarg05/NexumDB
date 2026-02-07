@@ -1,0 +1,16 @@
+{
+    "packages": {
+        ".": {
+            "release-type": "simple",
+            "changelog-path": "CHANGELOG.md",
+            "include-component-in-tag": false,
+            "include-v-in-tag": true,
+            "extra-files": [
+                "nexum_core/Cargo.toml",
+                "nexum_cli/Cargo.toml",
+                "Cargo.toml"
+            ]
+        }
+    },
+    "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json"
+}

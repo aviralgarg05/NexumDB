@@ -1,8 +1,13 @@
 /target/
 **/*.rs.bk
 *.pdb
-Cargo.lock
 nexumdb_data/
+
+# Model files (LLM weights)
+*.gguf
+*.ggml
+*.bin
+nexum_ai/models/
 
 # Python
 __pycache__/
@@ -15,6 +20,12 @@ env/
 *.egg-info/
 dist/
 build/
+
+# Test coverage
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
 
 # IDE
 .vscode/
@@ -30,3 +41,8 @@ Thumbs.db
 
 #Ignore vscode AI rules
 .github/instructions/codacy.instructions.md
+
+# Test cache files
+test_cache.json
+test_cache.pkl
+*.cache.json

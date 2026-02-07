@@ -1,7 +1,13 @@
 [package]
 name = "nexum_core"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
+license = "MIT"
+authors = ["Aviral Garg"]
+repository = "https://github.com/aviralgarg05/NexumDB"
+description = "AI-native database core engine with SQL and semantic caching"
+keywords = ["database", "ai", "sql", "semantic-cache"]
+categories = ["database-implementations"]
 
 [dependencies]
 sled = { workspace = true }
@@ -12,6 +18,24 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 regex = "1.10"
+log = "0.4"
 
 [dev-dependencies]
 tempfile = "3.8"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "storage_bench"
+harness = false
+
+[[bench]]
+name = "sql_bench"
+harness = false
+
+[[bench]]
+name = "executor_bench"
+harness = false
+
+[[bench]]
+name = "filter_bench"
+harness = false

@@ -1,0 +1,66 @@
+# Auto-labeling configuration for PRs
+
+# Rust-related changes
+"rust":
+    - changed-files:
+          - any-glob-to-any-file: ["**/*.rs", "**/Cargo.toml", "**/Cargo.lock"]
+
+# Python-related changes
+"python":
+    - changed-files:
+          - any-glob-to-any-file: ["**/*.py", "**/requirements*.txt", "**/pyproject.toml"]
+
+# Documentation changes
+"documentation":
+    - changed-files:
+          - any-glob-to-any-file: ["**/*.md", "docs/**/*"]
+
+# CI/CD changes
+"ci/cd":
+    - changed-files:
+          - any-glob-to-any-file: [".github/**/*"]
+
+# Dependencies
+"dependencies":
+    - changed-files:
+          - any-glob-to-any-file: ["**/Cargo.lock", "**/requirements*.txt", "**/package-lock.json"]
+
+# Tests
+"tests":
+    - changed-files:
+          - any-glob-to-any-file: ["**/tests/**/*", "**/*_test.rs", "**/test_*.py"]
+
+# Benchmarks
+"performance":
+    - changed-files:
+          - any-glob-to-any-file: ["**/benches/**/*", "**/benchmark*.rs"]
+
+# Security
+"security":
+    - changed-files:
+          - any-glob-to-any-file: ["SECURITY.md", ".github/workflows/codeql.yml", ".github/workflows/dependency-review.yml"]
+
+# Storage engine
+"storage":
+    - changed-files:
+          - any-glob-to-any-file: ["nexum_core/src/storage/**/*"]
+
+# SQL parser/planner
+"sql":
+    - changed-files:
+          - any-glob-to-any-file: ["nexum_core/src/sql/**/*"]
+
+# Query executor
+"executor":
+    - changed-files:
+          - any-glob-to-any-file: ["nexum_core/src/executor/**/*"]
+
+# AI/ML features
+"ai":
+    - changed-files:
+          - any-glob-to-any-file: ["nexum_ai/**/*", "nexum_core/src/bridge/**/*"]
+
+# CLI
+"cli":
+    - changed-files:
+          - any-glob-to-any-file: ["nexum_cli/**/*"]

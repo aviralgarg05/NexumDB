@@ -2,4 +2,7 @@ blank_issues_enabled: false
 contact_links:
   - name: Questions or discussions
     url: https://github.com/aviralgarg05/NexumDB/discussions
-    about: Ask questions, brainstorm ideas, or request guidance.
+    about: Ask questions, brainstorm ideas, or request guidance. OSCG'26 participants welcome!
+  - name: OSCG'26 Contribution Guidelines 
+    url: https://github.com/aviralgarg05/NexumDB/blob/main/CONTRIBUTING.md
+    about: Read our comprehensive guidelines for OSCG'26 contributors to maximize your impact and score.

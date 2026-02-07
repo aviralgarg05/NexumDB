@@ -1,0 +1,109 @@
+name: PR Review Reminder
+
+on:
+    schedule:
+        # Run every 6 hours
+        - cron: '0 */6 * * *'
+    workflow_dispatch: # Allow manual trigger
+
+permissions:
+    pull-requests: write
+    contents: read
+
+jobs:
+    remind-reviewers:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Check for PRs awaiting review
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+
+                      // Get all open PRs
+                      const { data: prs } = await github.rest.pulls.list({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        state: 'open',
+                        per_page: 100
+                      });
+
+                      for (const pr of prs) {
+                        // Skip draft PRs
+                        if (pr.draft) continue;
+
+                        // Skip PRs from bots
+                        if (pr.user.type === 'Bot') continue;
+
+                        const prUpdated = new Date(pr.updated_at);
+
+                        // Only process PRs older than 2 hours
+                        if (prUpdated > twoHoursAgo) continue;
+
+                        // Get PR reviews
+                        const { data: reviews } = await github.rest.pulls.listReviews({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          pull_number: pr.number
+                        });
+
+                        // Get requested reviewers
+                        const { data: reviewers } = await github.rest.pulls.listRequestedReviewers({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          pull_number: pr.number
+                        });
+
+                        const hasRequestedReviewers = reviewers.users.length > 0 || reviewers.teams.length > 0;
+                        const hasReviews = reviews.length > 0;
+
+                        // Check if PR has passing CI checks
+                        const { data: checkRuns } = await github.rest.checks.listForRef({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          ref: pr.head.sha,
+                          per_page: 100
+                        });
+
+                        const allChecksPassed = checkRuns.check_runs.every(
+                          check => check.conclusion === 'success' || check.conclusion === 'skipped'
+                        );
+
+                        // Get existing comments to avoid duplicate reminders
+                        const { data: comments } = await github.rest.issues.listComments({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: pr.number,
+                          per_page: 100
+                        });
+
+                        const hasRecentReminder = comments.some(c =>
+                          c.body.includes('Review Reminder') &&
+                          new Date(c.created_at) > new Date(Date.now() - 24 * 60 * 60 * 1000)
+                        );
+
+                        // Only remind if: has requested reviewers, no reviews yet, CI passed, and no recent reminder
+                        if (hasRequestedReviewers && !hasReviews && allChecksPassed && !hasRecentReminder) {
+                          const reviewerMentions = reviewers.users.map(u => `@${u.login}`).join(' ');
+                          const teamMentions = reviewers.teams.map(t => `@${context.repo.owner}/${t.slug}`).join(' ');
+
+                          let comment = `## Review Reminder\n\n`;
+                          comment += `This PR is ready for review!\n\n`;
+                          comment += `**Status:**\n`;
+                          comment += `- All CI checks passing\n`;
+                          comment += `- Awaiting review from: ${reviewerMentions} ${teamMentions}\n`;
+                          comment += `- Last updated: ${prUpdated.toLocaleDateString()}\n\n`;
+                          comment += `**Reviewers:** When you get a chance, please review this PR. Thank you!\n`;
+
+                          await github.rest.issues.createComment({
+                            owner: context.repo.owner,
+                            repo: context.repo.repo,
+                            issue_number: pr.number,
+                            body: comment
+                          });
+
+                          console.log(`Posted reminder for PR #${pr.number}`);
+                        }
+                      }
+
+                      console.log('Review reminder check completed');

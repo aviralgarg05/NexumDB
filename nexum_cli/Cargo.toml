@@ -1,7 +1,12 @@
 [package]
 name = "nexum_cli"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
+license = "MIT"
+authors = ["Aviral Garg"]
+repository = "https://github.com/aviralgarg05/NexumDB"
+description = "Command-line interface for NexumDB"
+keywords = ["database", "cli", "sql"]
 
 [[bin]]
 name = "nexum"

@@ -1,9 +1,58 @@
-# Default owner
+# CODEOWNERS - Auto-assign reviewers based on file paths
+# Format: path/to/file @username @team-name
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything
 * @aviralgarg05
 
-# Core engine
+# Rust Core Components
 /nexum_core/ @aviralgarg05
+/nexum_core/src/storage/ @aviralgarg05
+/nexum_core/src/executor/ @aviralgarg05
+/nexum_core/src/sql/ @aviralgarg05
+/nexum_core/src/catalog/ @aviralgarg05
+/nexum_core/src/bridge/ @aviralgarg05
+
+# CLI
 /nexum_cli/ @aviralgarg05
 
-# CI/CD
+# Python AI Components
+/nexum_ai/ @aviralgarg05
+/nexum_ai/model_manager.py @aviralgarg05
+/nexum_ai/optimizer.py @aviralgarg05
+/nexum_ai/rl_agent.py @aviralgarg05
+/nexum_ai/translator.py @aviralgarg05
+
+# Build Configuration
+/Cargo.toml @aviralgarg05
+/Cargo.lock @aviralgarg05
+**/Cargo.toml @aviralgarg05
+
+# Python Dependencies
+/nexum_ai/requirements.txt @aviralgarg05
+
+# CI/CD & GitHub Configuration
 /.github/ @aviralgarg05
+/.github/workflows/ @aviralgarg05
+/.github/dependabot.yml @aviralgarg05
+
+# Documentation
+/README.md @aviralgarg05
+/CHANGELOG.md @aviralgarg05
+/CONTRIBUTING.md @aviralgarg05
+/CODE_OF_CONDUCT.md @aviralgarg05
+/SECURITY.md @aviralgarg05
+/TESTING.md @aviralgarg05
+/ROADMAP.md @aviralgarg05
+*.md @aviralgarg05
+
+# Tests
+/tests/ @aviralgarg05
+
+# Docker
+/Dockerfile @aviralgarg05
+/docker-compose.yml @aviralgarg05
+
+# Scripts
+*.sh @aviralgarg05
+/demo.sh @aviralgarg05

@@ -109,6 +109,7 @@ impl Catalog {
 mod tests {
     use super::*;
     use crate::sql::types::DataType;
+    use tempfile::tempdir;
 
     #[test]
     fn test_catalog_operations() {
@@ -138,5 +139,35 @@ mod tests {
         let tables = catalog.list_tables().unwrap();
         assert_eq!(tables.len(), 1);
         assert_eq!(tables[0], "users");
+    }
+
+    #[test]
+    fn test_catalog_persistence() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("catalog_db");
+
+        {
+            let storage = StorageEngine::new(&db_path).unwrap();
+            let catalog = Catalog::new(storage);
+
+            let columns = vec![Column {
+                name: "id".to_string(),
+                data_type: DataType::Integer,
+            }];
+
+            catalog.create_table("persist_table", columns).unwrap();
+        }
+
+        {
+            let storage = StorageEngine::new(&db_path).unwrap();
+            let catalog = Catalog::new(storage);
+
+            let schema = catalog.get_table("persist_table").unwrap();
+            assert!(schema.is_some());
+            assert_eq!(schema.unwrap().name, "persist_table");
+
+            let tables = catalog.list_tables().unwrap();
+            assert_eq!(tables, vec!["persist_table".to_string()]);
+        }
     }
 }

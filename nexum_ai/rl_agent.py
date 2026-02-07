@@ -4,9 +4,7 @@ Learns to optimize query execution strategies based on performance metrics
 """
 
 import numpy as np
-from typing import Dict, List, Tuple
-import json
-import os
+from typing import Dict, Optional, Any
 
 
 class QLearningAgent:
@@ -25,7 +23,7 @@ class QLearningAgent:
         epsilon: float = 0.2,
         epsilon_decay: float = 0.995,
         state_file: str = "q_table.pkl"
-    ):
+    ) -> None:
         """
         Initialize Q-learning agent
         
@@ -104,7 +102,7 @@ class QLearningAgent:
         complexity: int,
         action: str,
         latency_ms: float
-    ):
+    ) -> None:
         """
         Update Q-value based on observed reward
         
@@ -158,14 +156,14 @@ class QLearningAgent:
         
         return base_reward
     
-    def decay_epsilon(self):
+    def decay_epsilon(self) -> None:
         """Decay exploration rate after each episode"""
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
             self.episode_count += 1
             print(f"Episode {self.episode_count}: epsilon decayed to {self.epsilon:.4f}")
     
-    def get_stats(self) -> Dict:
+    def get_stats(self) -> Dict[str, float]:
         """Get agent statistics"""
         return {
             'q_table_size': len(self.q_table),
@@ -175,9 +173,72 @@ class QLearningAgent:
             'avg_reward': np.mean([h['reward'] for h in self.training_history[-100:]]) if self.training_history else 0.0
         }
     
-    def save_state(self, filepath: str = None):
+    def explain_action(self, query_length: int, cache_hit: bool, complexity: int) -> Dict[str, Any]:
+        """
+        Explain what action would be taken without executing.
+        
+        Returns Q-values, state analysis, and predicted action for EXPLAIN command.
+        This method provides a read-only analysis of the RL agent's decision-making
+        process without actually executing any action or updating the Q-table.
+        
+        Args:
+            query_length: Length of SQL query
+            cache_hit: Whether query hit cache
+            complexity: Complexity score (0-10)
+        
+        Returns:
+            Dict containing:
+                - state: state key string
+                - state_breakdown: dict with query_length_bucket, cache_hit, complexity
+                - q_values: Q-values for all actions
+                - best_action: action with highest Q-value
+                - epsilon: current exploration rate
+                - would_explore: whether exploration is possible
+                - predicted_action: deterministic best action (ignores epsilon-greedy)
+                - explanation: human-readable explanation of agent behavior
+                - agent_stats: total_states_learned, total_updates, episodes
+        """
+        state = self._get_state_key(query_length, cache_hit, complexity)
+        
+        # Get Q-values for this state
+        if state in self.q_table:
+            q_values = {a: round(v, 4) for a, v in self.q_table[state].items()}
+        else:
+            q_values = {a: 0.0 for a in self.actions}
+        
+        # Determine best action
+        best_action = max(self.actions, key=lambda a: q_values.get(a, 0.0))
+        
+        # Truncate best_action for display if needed (defensive limit)
+        best_action_display = best_action[:20] if len(best_action) > 20 else best_action
+        
+        return {
+            'state': state,
+            'state_breakdown': {
+                'query_length_bucket': min(query_length // 10, 10),
+                'cache_hit': cache_hit,
+                'complexity': complexity
+            },
+            'q_values': q_values,
+            'best_action': best_action_display,
+            'epsilon': round(self.epsilon, 4),
+            'would_explore': self.epsilon > 0,
+            'predicted_action': best_action_display,  # Deterministic for explain
+            'explanation': f'With ε={self.epsilon:.4f}, agent would explore {self.epsilon*100:.1f}% of the time',
+            'agent_stats': {
+                'total_states_learned': len(self.q_table),
+                'total_updates': len(self.training_history),
+                'episodes': self.episode_count
+            }
+        }
+    
+    def save_state(self, filepath: Optional[str] = None) -> None:
         """Save Q-table and agent state to file using joblib"""
-        import joblib
+        try:
+            import joblib
+        except ImportError:
+            print("Warning: joblib not installed, cannot save state")
+            return
         
         if filepath is None:
             filepath = self.state_file
@@ -195,9 +256,14 @@ class QLearningAgent:
         except Exception as e:
             print(f"Error saving agent state: {e}")
     
-    def load_state(self, filepath: str = None):
+    def load_state(self, filepath: Optional[str] = None) -> None:
         """Load Q-table and agent state from file using joblib"""
-        import joblib
+        try:
+            import joblib
+        except ImportError:
+            print("Warning: joblib not installed, cannot load state")
+            return
+        
         import os
         
         if filepath is None:
@@ -216,7 +282,7 @@ class QLearningAgent:
             print(f"No saved state found at {filepath}, starting fresh")
 
 
-def test_rl_agent():
+def test_rl_agent() -> None:
     """Test the RL agent with simulated queries"""
     agent = QLearningAgent(learning_rate=0.1, epsilon=0.3)
     

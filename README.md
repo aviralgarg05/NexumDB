@@ -1,6 +1,14 @@
 [![CI](https://github.com/aviralgarg05/NexumDB/actions/workflows/ci.yml/badge.svg)](https://github.com/aviralgarg05/NexumDB/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/aviralgarg05/NexumDB/actions/workflows/codeql.yml/badge.svg)](https://github.com/aviralgarg05/NexumDB/actions/workflows/codeql.yml)
+[![codecov](https://codecov.io/gh/aviralgarg05/NexumDB/branch/main/graph/badge.svg)](https://codecov.io/gh/aviralgarg05/NexumDB)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+
 
 # NexumDB - AI-Native Database
+
+> 🚀 **OSCG'26 Participant**: NexumDB proudly participates in the Open Source Contributor Games 2026! High-quality contributions earn points, recognition, and networking opportunities. [Join us →](CONTRIBUTING.md)
 
 An innovative, open-source database that combines traditional SQL with AI-powered features including advanced query operators, natural language processing, semantic caching, and reinforcement learning-based query optimization.
 
@@ -11,6 +19,12 @@ An innovative, open-source database that combines traditional SQL with AI-powere
 - **Integration**: PyO3 bindings for seamless Rust-Python integration
 
 ## Features
+
+### v0.4.0 - Core Correctness & Table Management
+- **Projection-Correct SELECT**: Column/alias projection with schema validation
+- **Schema-Safe Writes**: INSERT/UPDATE validation with best-effort coercion
+- **Table Management**: SHOW TABLES, DESCRIBE, DROP TABLE (IF EXISTS)
+- **Cache Safety**: Query cache keys include WHERE/ORDER/LIMIT + full invalidation on writes
 
 ### v0.3.0 - Advanced SQL & Persistent Learning
 - **Advanced SQL Operators**: LIKE (pattern matching), IN (list membership), BETWEEN (range queries)
@@ -126,6 +140,8 @@ INSERT INTO users (id, name, age) VALUES (1, 'Alice', 30), (2, 'Bob', 25);
 
 -- Simple query
 SELECT * FROM users;
+SELECT id, name FROM users;
+SELECT name AS display_name FROM users;
 
 -- WHERE clause filtering (v0.2.0)
 SELECT * FROM users WHERE age > 25;
@@ -147,6 +163,15 @@ WHERE price BETWEEN 100 AND 500
   AND name LIKE 'L%'
 ORDER BY price DESC 
 LIMIT 10;
+
+-- Table management (v0.4.0)
+SHOW TABLES;
+DESCRIBE users;
+DROP TABLE IF EXISTS users;
+
+-- Data modification (v0.4.0)
+UPDATE users SET age = 31 WHERE id = 1;
+DELETE FROM users WHERE id = 2;
 ```
 
 #### Advanced SQL Operator Examples (Detailed)
@@ -400,6 +425,25 @@ No configuration needed - just use the database!
 - **AI-Powered**: Semantic caching using transformer embeddings
 - **Type-Safe**: Rust core with comprehensive error handling
 - **Well-Tested**: Full unit and integration test coverage
+
+## 🤝 Contributing to NexumDB
+
+**Ready to shape the future of AI-native databases?** NexumDB participates in the **Open Source Contributor Games 2026 (OSCG'26)**!
+
+### 🎯 Why Contribute?
+- **Impact**: Build cutting-edge database technology used by developers worldwide
+- **Recognition**: Earn OSCG points, badges, and community recognition
+- **Learning**: Master Rust, Python, AI/ML, and database internals
+- **Networking**: Connect with top developers, mentors, and industry professionals
+- **Career**: Gain valuable open-source experience for your portfolio
+
+### 🚀 Get Started
+1. Read our comprehensive [Contributing Guide](CONTRIBUTING.md)
+2. Check out [Good First Issues](https://github.com/aviralgarg05/NexumDB/labels/good%20first%20issue)
+3. Join our [Discussions](https://github.com/aviralgarg05/NexumDB/discussions) for questions
+4. Follow our [Code of Conduct](CODE_OF_CONDUCT.md)
+
+**Quality First**: We maintain high standards and provide mentorship to help you succeed. Every contribution matters, from bug fixes to major features!
 
 ## License
 

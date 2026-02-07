@@ -1,0 +1,40 @@
+name: Generate SBOM
+
+on:
+    release:
+        types: [published]
+    workflow_dispatch:
+
+permissions:
+    contents: write
+
+jobs:
+    sbom:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Generate Rust SBOM
+              uses: anchore/sbom-action@v0
+              with:
+                  path: .
+                  format: cyclonedx-json
+                  output-file: sbom-rust.cyclonedx.json
+                  artifact-name: sbom-rust
+
+            - name: Generate Python SBOM
+              uses: anchore/sbom-action@v0
+              with:
+                  path: ./nexum_ai
+                  format: cyclonedx-json
+                  output-file: sbom-python.cyclonedx.json
+                  artifact-name: sbom-python
+
+            - name: Upload SBOM to Release
+              if: github.event_name == 'release'
+              uses: softprops/action-gh-release@v2
+              with:
+                  files: |
+                      sbom-rust.cyclonedx.json
+                      sbom-python.cyclonedx.json

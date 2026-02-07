@@ -1,0 +1,36 @@
+name: DCO Check
+
+on:
+    pull_request:
+        branches: [main]
+
+permissions:
+    contents: read
+    pull-requests: read
+
+jobs:
+    dco:
+        runs-on: ubuntu-latest
+        # Skip DCO check for dependabot PRs and bots
+        if: github.actor != 'dependabot[bot]'
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+            - name: Check DCO Sign-off
+              run: |
+                  commits=$(git log --format='%H %s' origin/${{ github.base_ref }}..HEAD)
+                  failed=0
+                  while IFS= read -r line; do
+                    hash=$(echo "$line" | awk '{print $1}')
+                    msg=$(git log -1 --format='%B' "$hash")
+                    if ! echo "$msg" | grep -q "Signed-off-by:"; then
+                      echo "Missing Signed-off-by in commit: $hash"
+                      failed=1
+                    fi
+                  done <<< "$commits"
+                  if [ $failed -eq 1 ]; then
+                    echo "DCO check failed. Please sign off your commits with 'git commit -s'"
+                    exit 1
+                  fi
+                  echo "All commits have DCO sign-off"

@@ -6,7 +6,11 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for suggesting an improvement!
+        Thanks for suggesting an improvement! 🎨
+        
+        **OSCG'26 Contributors**: NexumDB participates in the Open Source Contributor Games 2026.
+        Well-researched feature requests contribute to your OSCG score and help advance AI database technology.
+        Please provide comprehensive details following our [contribution guidelines](../CONTRIBUTING.md).
 
   - type: textarea
     id: summary
@@ -33,16 +37,33 @@ body:
       description: List any alternative solutions or workarounds you have considered.
 
   - type: textarea
+    id: impact
+    attributes:
+      label: Impact Assessment
+      description: How will this feature benefit users? What's the expected adoption?
+      placeholder: This feature would improve query performance by 2x for JOIN operations, benefiting data analysts...
+    validations:
+      required: true
+
+  - type: textarea
     id: additional
     attributes:
       label: Additional Context
       description: Add any other context, diagrams, or references to existing issues.
 
   - type: checkboxes
-    id: terms
+    id: quality_standards
     attributes:
-      label: Code of Conduct
-      description: By submitting this issue, you agree to follow our Code of Conduct.
+      label: Quality Standards & Code of Conduct
+      description: By submitting this feature request, you agree to our standards.
       options:
+        - label: I have searched existing issues and discussions
+          required: true
+        - label: I have provided clear business value and use cases
+          required: true
+        - label: I understand the technical complexity involved
+          required: true
         - label: I agree to follow this project's Code of Conduct
+          required: true
+        - label: I understand this project participates in OSCG'26 quality standards
           required: true
