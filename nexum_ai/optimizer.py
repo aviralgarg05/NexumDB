@@ -119,6 +119,8 @@ class SemanticCache:
                 return entry['result']
         
         self.misses += 1
+        self._dirty = True
+        self._maybe_auto_save()
         return None
     
     def put(self, query: str, result: str) -> None:
@@ -164,11 +166,16 @@ class SemanticCache:
             self._last_save_time = time.time()
             print("Auto-saved cache to disk")
     
-    def _evict_lru(self) -> None:
+    def _evict_lru(self, batch_start_evictions: Optional[int] = None) -> None:
         """Evict least recently used cache entry
         
         Performance note: O(n) scan per eviction. Bulk evictions are O(n²).
         For frequent large evictions, consider maintaining sorted order or using heapq.
+        
+        Args:
+            batch_start_evictions: Eviction count at start of batch operation.
+                Used to limit logging to first 5 evictions per batch.
+                If None, logs only first 5 evictions ever (single-eviction mode).
         """
         if not self.cache:
             return
@@ -185,8 +192,17 @@ class SemanticCache:
         
         evicted = self.cache.pop(oldest_idx)
         self.evictions += 1
-        # Only log individual evictions in verbose mode; bulk evictions are summarized elsewhere
-        if self.evictions <= 5:  # Log first few evictions
+        
+        # Log individual evictions only for first few in a batch or overall
+        if batch_start_evictions is not None:
+            # Batch mode: log first 5 evictions of this batch
+            batch_eviction_num = self.evictions - batch_start_evictions
+            should_log = batch_eviction_num <= 5
+        else:
+            # Single mode: log first 5 evictions ever
+            should_log = self.evictions <= 5
+        
+        if should_log:
             print(f"Evicted LRU entry (query: {evicted['query'][:30]}..., age: {time.time() - oldest_time:.1f}s)")
     
     def clear(self) -> None:
@@ -370,7 +386,7 @@ class SemanticCache:
                 # Enforce max cache size immediately after loading
                 evictions_before = self.evictions
                 while len(self.cache) > self.max_cache_size:
-                    self._evict_lru()
+                    self._evict_lru(batch_start_evictions=evictions_before)
                 evictions_count = self.evictions - evictions_before
                 
                 print(f"Semantic cache loaded from JSON: {filepath} ({len(self.cache)} entries)")
@@ -467,7 +483,7 @@ class SemanticCache:
         # Evict entries if current size exceeds new max
         evictions_before = self.evictions
         while len(self.cache) > self.max_cache_size:
-            self._evict_lru()
+            self._evict_lru(batch_start_evictions=evictions_before)
         evictions_count = self.evictions - evictions_before
         
         if len(self.cache) > 0:
