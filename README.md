@@ -1,3 +1,5 @@
+[![CI](https://github.com/aviralgarg05/NexumDB/actions/workflows/ci.yml/badge.svg)](https://github.com/aviralgarg05/NexumDB/actions/workflows/ci.yml)
+
 # NexumDB - AI-Native Database
 
 An innovative, open-source database that combines traditional SQL with AI-powered features including advanced query operators, natural language processing, semantic caching, and reinforcement learning-based query optimization.
@@ -55,6 +57,39 @@ export PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1
 
 # Build release binary
 cargo build --release
+```
+
+## Build, run and stop the application using docker compose
+
+### Build the application
+
+```bash
+$ docker compose build
+```
+
+### Run the application
+
+```bash
+$ docker compose up
+```
+
+### Run an interactive shell
+
+```bash
+$ docker compose up -d
+$ docker exec -it nexumdb nexum
+```
+ 
+### Stop the application 
+
+```bash
+$ docker compose down
+```
+
+### Logs 
+
+```bash 
+$ docker compose logs
 ```
 
 ## Python Dependencies

@@ -5,7 +5,7 @@ use crate::storage::{Result, StorageEngine, StorageError};
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
-mod filter;
+pub mod filter;
 use filter::ExpressionEvaluator;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,11 +29,15 @@ impl Executor {
         }
     }
 
-    pub fn with_cache(mut self) -> Self {
-        match SemanticCache::new() {
+    pub fn with_cache(self) -> Self {
+        self.with_cache_file("semantic_cache.pkl")
+    }
+
+    pub fn with_cache_file(mut self, cache_file: &str) -> Self {
+        match SemanticCache::with_cache_file(cache_file) {
             Ok(cache) => {
                 self.cache = Some(cache);
-                println!("Semantic cache enabled");
+                println!("Semantic cache enabled with file: {}", cache_file);
             }
             Err(e) => {
                 println!("Warning: Could not initialize semantic cache: {}", e);
@@ -184,6 +188,40 @@ impl Executor {
 
     fn table_data_prefix(table: &str) -> Vec<u8> {
         format!("data:{}:", table).into_bytes()
+    }
+
+    pub fn save_cache(&self) -> Result<()> {
+        if let Some(cache) = &self.cache {
+            cache
+                .save_cache()
+                .map_err(|e| StorageError::WriteError(e.to_string()))?;
+            println!("Semantic cache saved to disk");
+        } else {
+            println!("No semantic cache to save");
+        }
+        Ok(())
+    }
+
+    pub fn clear_cache(&self) -> Result<()> {
+        if let Some(cache) = &self.cache {
+            cache
+                .clear_cache()
+                .map_err(|e| StorageError::WriteError(e.to_string()))?;
+            println!("Semantic cache cleared");
+        } else {
+            println!("No semantic cache to clear");
+        }
+        Ok(())
+    }
+
+    pub fn get_cache_stats(&self) -> Result<String> {
+        if let Some(cache) = &self.cache {
+            cache
+                .get_cache_stats()
+                .map_err(|e| StorageError::ReadError(e.to_string()))
+        } else {
+            Ok("No semantic cache enabled".to_string())
+        }
     }
 }
 

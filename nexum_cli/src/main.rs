@@ -1,4 +1,4 @@
-use nexum_core::{Catalog, Executor, NLTranslator, Parser, StorageEngine};
+use nexum_core::{Catalog, Executor, NLTranslator, Parser, QueryExplainer, StorageEngine};
 use std::io::{self, Write};
 
 fn main() -> anyhow::Result<()> {
@@ -20,9 +20,21 @@ fn main() -> anyhow::Result<()> {
         }
     };
 
+    let query_explainer = match QueryExplainer::new() {
+        Ok(explainer) => {
+            println!("Query EXPLAIN enabled");
+            Some(explainer)
+        }
+        Err(e) => {
+            println!("Warning: Query explainer not available: {}", e);
+            None
+        }
+    };
+
     println!("Ready. Commands:");
     println!("  - SQL: Type any SQL query (CREATE TABLE, INSERT, SELECT)");
     println!("  - ASK: Type 'ASK <question>' for natural language queries");
+    println!("  - EXPLAIN: Type 'EXPLAIN <query>' to see query execution plan");
     println!("  - EXIT: Type 'exit' or 'quit' to exit\n");
 
     loop {
@@ -75,6 +87,26 @@ fn main() -> anyhow::Result<()> {
                 }
             } else {
                 eprintln!("Natural language translator not available");
+            }
+            continue;
+        }
+
+        // Handle EXPLAIN command
+        if input.to_uppercase().starts_with("EXPLAIN ") {
+            let query_to_explain = input[8..].trim();
+
+            if let Some(ref explainer) = query_explainer {
+                println!();
+                match explainer.explain(query_to_explain) {
+                    Ok(plan) => {
+                        println!("{}", plan);
+                    }
+                    Err(e) => {
+                        eprintln!("Explain error: {}", e);
+                    }
+                }
+            } else {
+                eprintln!("Query explainer not available");
             }
             continue;
         }
