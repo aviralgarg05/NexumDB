@@ -109,6 +109,8 @@ class SemanticCache:
                 # Update last access time for LRU
                 entry['last_access'] = current_time
                 self.hits += 1
+                self._dirty = True
+                self._maybe_auto_save()
                 print(f"Cache hit! Similarity: {similarity:.4f}")
                 return entry['result']
         
@@ -127,6 +129,8 @@ class SemanticCache:
                 # Update existing entry instead of creating duplicate
                 entry['result'] = result
                 entry['last_access'] = current_time
+                self._dirty = True
+                self._maybe_auto_save()
                 print(f"Updated existing cache entry (similarity: {similarity:.4f})")
                 return
 
@@ -173,7 +177,9 @@ class SemanticCache:
         
         evicted = self.cache.pop(oldest_idx)
         self.evictions += 1
-        print(f"Evicted LRU entry (query: {evicted['query'][:30]}..., age: {time.time() - oldest_time:.1f}s)")
+        # Only log individual evictions in verbose mode; bulk evictions are summarized elsewhere
+        if self.evictions <= 5:  # Log first few evictions
+            print(f"Evicted LRU entry (query: {evicted['query'][:30]}..., age: {time.time() - oldest_time:.1f}s)")
     
     def clear(self) -> None:
         """Clear the cache and reset statistics"""
@@ -203,7 +209,14 @@ class SemanticCache:
             filepath = str(self.cache_path)
         
         # Try JSON first (safer format)
-        json_filepath = filepath.replace('.pkl', '.json') if filepath.endswith('.pkl') else f"{filepath}.json"
+        # Handle both .pkl (convert to .json) and existing .json paths
+        if filepath.endswith('.pkl'):
+            json_filepath = filepath.replace('.pkl', '.json')
+        elif filepath.endswith('.json'):
+            json_filepath = filepath
+        else:
+            json_filepath = f"{filepath}.json"
+        
         if os.path.exists(json_filepath):
             self.load_cache_json(json_filepath)
             return
@@ -341,10 +354,14 @@ class SemanticCache:
                         entry['created_at'] = current_time
                 
                 # Enforce max cache size immediately after loading
+                evictions_before = self.evictions
                 while len(self.cache) > self.max_cache_size:
                     self._evict_lru()
+                evictions_count = self.evictions - evictions_before
                 
                 print(f"Semantic cache loaded from JSON: {filepath} ({len(self.cache)} entries)")
+                if evictions_count > 0:
+                    print(f"Evicted {evictions_count} entries to enforce max cache size")
                 
             except Exception as e:
                 print(f"Error loading cache from JSON: {e}")
@@ -434,11 +451,16 @@ class SemanticCache:
             print(f"Cache max size updated to {new_max_size}")
         
         # Evict entries if current size exceeds new max
+        evictions_before = self.evictions
         while len(self.cache) > self.max_cache_size:
             self._evict_lru()
+        evictions_count = self.evictions - evictions_before
         
         if len(self.cache) > 0:
-            print(f"Cache optimized: {len(self.cache)} entries remaining")
+            if evictions_count > 0:
+                print(f"Cache optimized: {len(self.cache)} entries remaining ({evictions_count} evicted)")
+            else:
+                print(f"Cache optimized: {len(self.cache)} entries remaining")
             self.save_cache()
 
 
