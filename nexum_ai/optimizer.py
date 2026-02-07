@@ -102,11 +102,7 @@ class SemanticCache:
         """Store query and result in cache with automatic LRU eviction"""
         query_vec = self.vectorize(query)
         current_time = time.time()
-        
-        # Check if we need to evict entries before adding new one
-        if len(self.cache) >= self.max_cache_size:
-            self._evict_lru()
-        
+
         self.cache.append({
             'query': query,
             'vector': query_vec,
@@ -114,6 +110,11 @@ class SemanticCache:
             'last_access': current_time,
             'created_at': current_time
         })
+        
+        # Evict entries while cache exceeds max size (handles max_cache_size=0 correctly)
+        while len(self.cache) > self.max_cache_size:
+            self._evict_lru()
+        
         print(f"Cached query: {query[:50]}... (cache size: {len(self.cache)}/{self.max_cache_size})")
     
     def _evict_lru(self) -> None:
