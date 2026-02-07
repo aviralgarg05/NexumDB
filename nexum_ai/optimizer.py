@@ -99,7 +99,11 @@ class SemanticCache:
         return float(dot_product / (norm1 * norm2))
     
     def get(self, query: str) -> Optional[str]:
-        """Retrieve cached result if similar query exists and update LRU timestamp"""
+        """Retrieve cached result if similar query exists and update LRU timestamp
+        
+        Performance note: This performs O(n) linear scan with vectorization on each call.
+        For large caches in hot paths, consider approximate nearest-neighbor indexing.
+        """
         query_vec = self.vectorize(query)
         current_time = time.time()
         
@@ -161,7 +165,11 @@ class SemanticCache:
             print("Auto-saved cache to disk")
     
     def _evict_lru(self) -> None:
-        """Evict least recently used cache entry"""
+        """Evict least recently used cache entry
+        
+        Performance note: O(n) scan per eviction. Bulk evictions are O(n²).
+        For frequent large evictions, consider maintaining sorted order or using heapq.
+        """
         if not self.cache:
             return
         
@@ -197,8 +205,14 @@ class SemanticCache:
         if filepath is None:
             filepath = str(self.cache_path)
         
-        # Use JSON format by default for security
-        json_filepath = filepath.replace('.pkl', '.json') if filepath.endswith('.pkl') else filepath
+        # Normalize to JSON extension for consistency with load_cache
+        if filepath.endswith('.pkl'):
+            json_filepath = filepath.replace('.pkl', '.json')
+        elif filepath.endswith('.json'):
+            json_filepath = filepath
+        else:
+            json_filepath = f"{filepath}.json"
+        
         self.save_cache_json(json_filepath)
         self._dirty = False
         self._last_save_time = time.time()
