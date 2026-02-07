@@ -13,7 +13,7 @@ use std::time::Duration;
 #[derive(Parser, Debug)]
 #[command(name = "nexum")]
 #[command(author = "Aviral Garg")]
-#[command(version = "0.4.0")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "An AI-native database combining SQL with semantic caching and NL queries")]
 #[command(long_about = r#"
 NexumDB is an innovative, open-source database that combines traditional SQL 
@@ -115,8 +115,8 @@ fn main() -> anyhow::Result<()> {
             continue;
         }
 
-        if input.to_uppercase().starts_with("ASK ") {
-            let natural_query = input[4..].trim();
+        if let Some(natural_query) = input.strip_prefix("ASK ").or_else(|| input.strip_prefix("ask ")) {
+            let natural_query = natural_query.trim();
 
             if let Some(ref translator) = nl_translator {
                 let schema = get_schema_context(&catalog);
@@ -158,8 +158,8 @@ fn main() -> anyhow::Result<()> {
         }
 
         // Handle EXPLAIN command
-        if input.to_uppercase().starts_with("EXPLAIN ") {
-            let query_to_explain = input[8..].trim();
+        if let Some(query_to_explain) = input.strip_prefix("EXPLAIN ").or_else(|| input.strip_prefix("explain ")) {
+            let query_to_explain = query_to_explain.trim();
 
             if let Some(ref explainer) = query_explainer {
                 println!();
@@ -205,14 +205,14 @@ fn print_banner() {
  | \ | | _____  ___   _ _ __ |  _ \| __ ) 
  |  \| |/ _ \ \/ / | | | '_ \| | | |  _ \ 
  | |\  |  __/>  <| |_| | | | | |_| | |_) |
- |_| \_|\___/_/\_\\__,_|_| |_|____/|____/ 
+ |_| \_|\___/_/\_\__,_|_| |_|____/|____/ 
 "#
         .cyan()
         .bold()
     );
     println!(
         "  {} {}",
-        "v0.4.0".yellow(),
+        format!("v{}", env!("CARGO_PKG_VERSION")).yellow(),
         "- AI-Native Database with Natural Language Support".white()
     );
     println!();
@@ -385,9 +385,12 @@ fn print_result_json(result: &ExecutionResult) {
                 .map(|row| {
                     let mut obj = serde_json::Map::new();
                     for (i, col) in columns.iter().enumerate() {
-                        if i < row.values.len() {
-                            obj.insert(col.clone(), value_to_json(&row.values[i]));
-                        }
+                        let value = if i < row.values.len() {
+                            value_to_json(&row.values[i])
+                        } else {
+                            serde_json::Value::Null
+                        };
+                        obj.insert(col.clone(), value);
                     }
                     serde_json::Value::Object(obj)
                 })
@@ -439,7 +442,7 @@ fn print_result_json(result: &ExecutionResult) {
             })
         }
     };
-    println!("{}", serde_json::to_string_pretty(&json).unwrap());
+    println!("{}", serde_json::to_string_pretty(&json).unwrap_or_else(|e| format!("{{\"error\": \"{}\"}}", e)));
 }
 
 fn print_result_formatted(result: &ExecutionResult) {
@@ -533,7 +536,20 @@ fn format_value(value: &nexum_core::sql::types::Value) -> String {
 fn value_to_json(value: &nexum_core::sql::types::Value) -> serde_json::Value {
     match value {
         nexum_core::sql::types::Value::Integer(i) => serde_json::json!(i),
-        nexum_core::sql::types::Value::Float(f) => serde_json::json!(f),
+        nexum_core::sql::types::Value::Float(f) => {
+            // Handle NaN and Infinity which are not valid JSON
+            if f.is_nan() {
+                serde_json::json!("NaN")
+            } else if f.is_infinite() {
+                if *f > 0.0 {
+                    serde_json::json!("Infinity")
+                } else {
+                    serde_json::json!("-Infinity")
+                }
+            } else {
+                serde_json::json!(f)
+            }
+        }
         nexum_core::sql::types::Value::Text(t) => serde_json::json!(t),
         nexum_core::sql::types::Value::Boolean(b) => serde_json::json!(b),
         nexum_core::sql::types::Value::Null => serde_json::Value::Null,
