@@ -42,6 +42,9 @@ Thumbs.db
 #Ignore vscode AI rules
 .github/instructions/codacy.instructions.md
 
+# Cache directory (runtime artifacts)
+cache/
+
 # Test cache files
 test_cache.json
 test_cache.pkl
