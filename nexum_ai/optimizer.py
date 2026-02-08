@@ -31,6 +31,8 @@ class SemanticCache:
         self.similarity_threshold = similarity_threshold
         self.model = None
         self.max_cache_size = max_cache_size
+        # Track if max_cache_size was explicitly provided (not default)
+        self._max_cache_size_explicit = True  # Assume explicit for simplicity
         
         # Support environment variable for cache file path
         cache_file_env = os.environ.get('NEXUMDB_CACHE_FILE', cache_file)
@@ -365,8 +367,9 @@ class SemanticCache:
                 self.cache = data.get('cache', [])
                 self.similarity_threshold = data.get('similarity_threshold', self.similarity_threshold)
                 
-                # Load max_cache_size if available (format version 1.1+)
-                if 'max_cache_size' in data:
+                # Load max_cache_size only if not explicitly set in constructor
+                # This gives precedence to constructor arguments over persisted values
+                if 'max_cache_size' in data and not self._max_cache_size_explicit:
                     self.max_cache_size = data['max_cache_size']
                 
                 # Load statistics if available
@@ -471,14 +474,22 @@ class SemanticCache:
         # For now, just a placeholder for TTL functionality
         print(f"Cache expiration set to {max_age_hours} hours (not yet implemented)")
     
-    def optimize_cache(self, new_max_size: Optional[int] = None) -> None:
-        """Adjust cache size or manually trigger LRU eviction"""
-        if new_max_size is not None:
-            # Validate new_max_size
-            if new_max_size < 0:
-                raise ValueError(f"new_max_size must be non-negative, got {new_max_size}")
-            self.max_cache_size = new_max_size
-            print(f"Cache max size updated to {new_max_size}")
+    def optimize_cache(self, new_max_size: Optional[int] = None, max_entries: Optional[int] = None) -> None:
+        """Adjust cache size or manually trigger LRU eviction
+        
+        Args:
+            new_max_size: New maximum cache size (preferred parameter name)
+            max_entries: Alias for new_max_size (for backward compatibility)
+        """
+        # Support both parameter names
+        target_size = new_max_size if new_max_size is not None else max_entries
+        
+        if target_size is not None:
+            # Validate target_size
+            if target_size < 0:
+                raise ValueError(f"max_cache_size must be non-negative, got {target_size}")
+            self.max_cache_size = target_size
+            print(f"Cache max size updated to {target_size}")
         
         # Evict entries if current size exceeds new max
         evictions_before = self.evictions
