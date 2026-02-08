@@ -1,5 +1,5 @@
-use thiserror::Error;
 use std::fmt;
+use thiserror::Error;
 
 /// Error codes for programmatic handling of storage errors.
 /// Format: NXM-STOR-xxx where xxx is a three-digit code.
@@ -39,14 +39,18 @@ pub enum StorageError {
         suggestion: String,
     },
 
-    #[error("[{code}] Failed to write to database\n  Reason: {reason}\n  Suggestion: {suggestion}")]
+    #[error(
+        "[{code}] Failed to write to database\n  Reason: {reason}\n  Suggestion: {suggestion}"
+    )]
     WriteError {
         code: ErrorCode,
         reason: String,
         suggestion: String,
     },
 
-    #[error("[{code}] Failed to read from database\n  Reason: {reason}\n  Suggestion: {suggestion}")]
+    #[error(
+        "[{code}] Failed to read from database\n  Reason: {reason}\n  Suggestion: {suggestion}"
+    )]
     ReadError {
         code: ErrorCode,
         reason: String,
@@ -288,10 +292,7 @@ impl StorageError {
     }
 
     /// Internal helper to create SerializationError.
-    fn serialization_error(
-        reason: impl Into<String>,
-        data_preview: impl Into<String>,
-    ) -> Self {
+    fn serialization_error(reason: impl Into<String>, data_preview: impl Into<String>) -> Self {
         let reason = reason.into();
         let data_preview = data_preview.into();
 
