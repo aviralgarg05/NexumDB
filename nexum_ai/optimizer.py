@@ -7,18 +7,30 @@ from typing import Optional, List, Dict, Any
 import json
 import os
 from pathlib import Path
+import time
 
 class SemanticCache:
     """
-    Caches query results using semantic similarity
+    Caches query results using semantic similarity with LRU eviction
     Uses local embedding models only
     Supports persistence to disk via JSON or pickle files
+    Implements automatic memory management with configurable max size
+    
+    Note: Statistics (hits, misses, evictions) are initialized to 0 on construction,
+    then overwritten by persisted values if a cache file exists. To reset statistics
+    while preserving cache entries, call get_cache_stats() and manually restore them
+    after initialization.
     """
     
-    def __init__(self, similarity_threshold: float = 0.95, cache_file: str = "semantic_cache.pkl") -> None:
+    def __init__(self, similarity_threshold: float = 0.95, cache_file: str = "semantic_cache.pkl", max_cache_size: int = 1000) -> None:
+        # Validate max_cache_size
+        if max_cache_size < 0:
+            raise ValueError(f"max_cache_size must be non-negative, got {max_cache_size}")
+        
         self.cache: List[Dict] = []
         self.similarity_threshold = similarity_threshold
         self.model = None
+        self.max_cache_size = max_cache_size
         
         # Support environment variable for cache file path
         cache_file_env = os.environ.get('NEXUMDB_CACHE_FILE', cache_file)
@@ -26,7 +38,20 @@ class SemanticCache:
         
         self.cache_dir = Path("cache")
         self.cache_dir.mkdir(exist_ok=True)
-        self.cache_path = self.cache_dir / self.cache_file
+        
+        # Always use JSON extension for cache_path (actual persistence format)
+        json_filename = cache_file_env.replace('.pkl', '.json') if cache_file_env.endswith('.pkl') else cache_file_env
+        self.cache_path = self.cache_dir / json_filename
+        
+        # Statistics (may be overwritten by load_cache if persisted file exists)
+        self.hits = 0
+        self.misses = 0
+        self.evictions = 0
+        
+        # Dirty flag for deferred persistence
+        self._dirty = False
+        self._last_save_time = time.time()
+        self._auto_save_interval = 60.0  # Auto-save every 60 seconds if dirty
         
         # Load existing cache on initialization
         self.load_cache()
@@ -74,30 +99,118 @@ class SemanticCache:
         return float(dot_product / (norm1 * norm2))
     
     def get(self, query: str) -> Optional[str]:
-        """Retrieve cached result if similar query exists"""
+        """Retrieve cached result if similar query exists and update LRU timestamp
+        
+        Performance note: This performs O(n) linear scan with vectorization on each call.
+        For large caches in hot paths, consider approximate nearest-neighbor indexing.
+        """
         query_vec = self.vectorize(query)
+        current_time = time.time()
         
         for entry in self.cache:
             similarity = self.cosine_similarity(query_vec, entry['vector'])
             if similarity >= self.similarity_threshold:
+                # Update last access time for LRU
+                entry['last_access'] = current_time
+                self.hits += 1
+                self._dirty = True
+                self._maybe_auto_save()
                 print(f"Cache hit! Similarity: {similarity:.4f}")
                 return entry['result']
         
+        self.misses += 1
+        self._dirty = True
+        self._maybe_auto_save()
         return None
     
     def put(self, query: str, result: str) -> None:
-        """Store query and result in cache"""
+        """Store query and result in cache with automatic LRU eviction"""
         query_vec = self.vectorize(query)
+        current_time = time.time()
+
+        # Check for existing similar entry and update instead of duplicating
+        for entry in self.cache:
+            similarity = self.cosine_similarity(query_vec, entry['vector'])
+            if similarity >= self.similarity_threshold:
+                # Update existing entry instead of creating duplicate
+                entry['result'] = result
+                entry['last_access'] = current_time
+                self._dirty = True
+                self._maybe_auto_save()
+                print(f"Updated existing cache entry (similarity: {similarity:.4f})")
+                return
+
+        # No similar entry found, add new one
         self.cache.append({
             'query': query,
             'vector': query_vec,
-            'result': result
+            'result': result,
+            'last_access': current_time,
+            'created_at': current_time
         })
-        print(f"Cached query: {query[:50]}...")
+        
+        # Evict entries while cache exceeds max size (handles max_cache_size=0 correctly)
+        while len(self.cache) > self.max_cache_size:
+            self._evict_lru()
+        
+        self._dirty = True
+        self._maybe_auto_save()
+        
+        print(f"Cached query: {query[:50]}... (cache size: {len(self.cache)}/{self.max_cache_size})")
+    
+    def _maybe_auto_save(self) -> None:
+        """Auto-save cache if dirty and enough time has passed"""
+        if self._dirty and (time.time() - self._last_save_time) > self._auto_save_interval:
+            self.save_cache()
+            self._dirty = False
+            self._last_save_time = time.time()
+            print("Auto-saved cache to disk")
+    
+    def _evict_lru(self, batch_start_evictions: Optional[int] = None) -> None:
+        """Evict least recently used cache entry
+        
+        Performance note: O(n) scan per eviction. Bulk evictions are O(n²).
+        For frequent large evictions, consider maintaining sorted order or using heapq.
+        
+        Args:
+            batch_start_evictions: Eviction count at start of batch operation.
+                Used to limit logging to first 5 evictions per batch.
+                If None, logs only first 5 evictions ever (single-eviction mode).
+        """
+        if not self.cache:
+            return
+        
+        # Find entry with oldest last_access time
+        oldest_idx = 0
+        oldest_time = self.cache[0].get('last_access', self.cache[0].get('created_at', 0))
+        
+        for idx, entry in enumerate(self.cache):
+            access_time = entry.get('last_access', entry.get('created_at', 0))
+            if access_time < oldest_time:
+                oldest_time = access_time
+                oldest_idx = idx
+        
+        evicted = self.cache.pop(oldest_idx)
+        self.evictions += 1
+        
+        # Log individual evictions only for first few in a batch or overall
+        if batch_start_evictions is not None:
+            # Batch mode: log first 5 evictions of this batch
+            batch_eviction_num = self.evictions - batch_start_evictions
+            should_log = batch_eviction_num <= 5
+        else:
+            # Single mode: log first 5 evictions ever
+            should_log = self.evictions <= 5
+        
+        if should_log:
+            print(f"Evicted LRU entry (query: {evicted['query'][:30]}..., age: {time.time() - oldest_time:.1f}s)")
     
     def clear(self) -> None:
-        """Clear the cache"""
+        """Clear the cache and reset statistics"""
         self.cache.clear()
+        self.hits = 0
+        self.misses = 0
+        self.evictions = 0
         # Remove cache file when clearing
         if self.cache_path.exists():
             self.cache_path.unlink()
@@ -108,9 +221,17 @@ class SemanticCache:
         if filepath is None:
             filepath = str(self.cache_path)
         
-        # Use JSON format by default for security
-        json_filepath = filepath.replace('.pkl', '.json') if filepath.endswith('.pkl') else filepath
+        # Normalize to JSON extension for consistency with load_cache
+        if filepath.endswith('.pkl'):
+            json_filepath = filepath.replace('.pkl', '.json')
+        elif filepath.endswith('.json'):
+            json_filepath = filepath
+        else:
+            json_filepath = f"{filepath}.json"
+        
         self.save_cache_json(json_filepath)
+        self._dirty = False
+        self._last_save_time = time.time()
     
     def load_cache(self, filepath: Optional[str] = None) -> None:
         """Load cache from disk using JSON (safe) or pickle (legacy)"""
@@ -118,7 +239,14 @@ class SemanticCache:
             filepath = str(self.cache_path)
         
         # Try JSON first (safer format)
-        json_filepath = filepath.replace('.pkl', '.json') if filepath.endswith('.pkl') else f"{filepath}.json"
+        # Handle both .pkl (convert to .json) and existing .json paths
+        if filepath.endswith('.pkl'):
+            json_filepath = filepath.replace('.pkl', '.json')
+        elif filepath.endswith('.json'):
+            json_filepath = filepath
+        else:
+            json_filepath = f"{filepath}.json"
+        
         if os.path.exists(json_filepath):
             self.load_cache_json(json_filepath)
             return
@@ -159,10 +287,16 @@ class SemanticCache:
                 print(f"Semantic cache loaded from {filepath} ({len(self.cache)} entries)")
                 print("Note: Converting legacy pickle cache to JSON format for security")
                 
-                # Validate cache entries
+                # Validate and upgrade cache entries with timestamps
                 valid_entries = []
+                current_time = time.time()
                 for entry in self.cache:
                     if all(key in entry for key in ['query', 'vector', 'result']):
+                        # Add timestamps if missing (backward compatibility)
+                        if 'last_access' not in entry:
+                            entry['last_access'] = current_time
+                        if 'created_at' not in entry:
+                            entry['created_at'] = current_time
                         valid_entries.append(entry)
                     else:
                         print("Warning: Invalid cache entry found and removed")
@@ -188,13 +322,19 @@ class SemanticCache:
             # Create backup of existing cache
             backup_path = f"{filepath}.backup"
             if os.path.exists(filepath):
-                os.rename(filepath, backup_path)
+                os.replace(filepath, backup_path)
             
             cache_data = {
                 'cache': self.cache,
                 'similarity_threshold': self.similarity_threshold,
+                'max_cache_size': self.max_cache_size,
                 'cache_size': len(self.cache),
-                'format_version': '1.0'
+                'format_version': '1.1',  # Updated for LRU support
+                'statistics': {
+                    'hits': self.hits,
+                    'misses': self.misses,
+                    'evictions': self.evictions
+                }
             }
             
             with open(filepath, 'w') as f:
@@ -210,10 +350,10 @@ class SemanticCache:
             print(f"Error saving cache to JSON: {e}")
             # Restore backup if save failed
             if os.path.exists(backup_path):
-                os.rename(backup_path, filepath)
+                os.replace(backup_path, filepath)
     
     def load_cache_json(self, filepath: Optional[str] = None) -> None:
-        """Load cache from JSON format"""
+        """Load cache from JSON format with backward compatibility for legacy entries"""
         if filepath is None:
             filepath = str(self.cache_path).replace('.pkl', '.json')
         
@@ -225,7 +365,33 @@ class SemanticCache:
                 self.cache = data.get('cache', [])
                 self.similarity_threshold = data.get('similarity_threshold', self.similarity_threshold)
                 
+                # Load max_cache_size if available (format version 1.1+)
+                if 'max_cache_size' in data:
+                    self.max_cache_size = data['max_cache_size']
+                
+                # Load statistics if available
+                stats = data.get('statistics', {})
+                self.hits = stats.get('hits', 0)
+                self.misses = stats.get('misses', 0)
+                self.evictions = stats.get('evictions', 0)
+                
+                # Add timestamps to legacy entries for backward compatibility
+                current_time = time.time()
+                for entry in self.cache:
+                    if 'last_access' not in entry:
+                        entry['last_access'] = current_time
+                    if 'created_at' not in entry:
+                        entry['created_at'] = current_time
+                
+                # Enforce max cache size immediately after loading
+                evictions_before = self.evictions
+                while len(self.cache) > self.max_cache_size:
+                    self._evict_lru(batch_start_evictions=evictions_before)
+                evictions_count = self.evictions - evictions_before
+                
                 print(f"Semantic cache loaded from JSON: {filepath} ({len(self.cache)} entries)")
+                if evictions_count > 0:
+                    print(f"Evicted {evictions_count} entries to enforce max cache size")
                 
             except Exception as e:
                 print(f"Error loading cache from JSON: {e}")
@@ -234,13 +400,21 @@ class SemanticCache:
             print(f"No JSON cache file found at {filepath}")
     
     def get_cache_stats(self) -> Dict[str, Any]:
-        """Get cache statistics"""
+        """Get cache statistics including LRU and performance metrics"""
+        hit_rate = self.hits / (self.hits + self.misses) if (self.hits + self.misses) > 0 else 0.0
+        
         return {
             'total_entries': len(self.cache),
+            'max_cache_size': self.max_cache_size,
+            'cache_usage_percent': (len(self.cache) / self.max_cache_size * 100) if self.max_cache_size > 0 else 0,
             'similarity_threshold': self.similarity_threshold,
             'cache_file': str(self.cache_path),
             'cache_exists': self.cache_path.exists(),
-            'cache_size_bytes': self.cache_path.stat().st_size if self.cache_path.exists() else 0
+            'cache_size_bytes': self.cache_path.stat().st_size if self.cache_path.exists() else 0,
+            'hits': self.hits,
+            'misses': self.misses,
+            'evictions': self.evictions,
+            'hit_rate': round(hit_rate, 4)
         }
     
     def explain_query(self, query: str) -> Dict[str, Any]:
@@ -297,12 +471,26 @@ class SemanticCache:
         # For now, just a placeholder for TTL functionality
         print(f"Cache expiration set to {max_age_hours} hours (not yet implemented)")
     
-    def optimize_cache(self, max_entries: int = 1000) -> None:
-        """Remove oldest entries if cache exceeds max size"""
-        if len(self.cache) > max_entries:
-            removed_count = len(self.cache) - max_entries
-            self.cache = self.cache[-max_entries:]  # Keep most recent entries
-            print(f"Cache optimized: removed {removed_count} oldest entries")
+    def optimize_cache(self, new_max_size: Optional[int] = None) -> None:
+        """Adjust cache size or manually trigger LRU eviction"""
+        if new_max_size is not None:
+            # Validate new_max_size
+            if new_max_size < 0:
+                raise ValueError(f"new_max_size must be non-negative, got {new_max_size}")
+            self.max_cache_size = new_max_size
+            print(f"Cache max size updated to {new_max_size}")
+        
+        # Evict entries if current size exceeds new max
+        evictions_before = self.evictions
+        while len(self.cache) > self.max_cache_size:
+            self._evict_lru(batch_start_evictions=evictions_before)
+        evictions_count = self.evictions - evictions_before
+        
+        if len(self.cache) > 0:
+            if evictions_count > 0:
+                print(f"Cache optimized: {len(self.cache)} entries remaining ({evictions_count} evicted)")
+            else:
+                print(f"Cache optimized: {len(self.cache)} entries remaining")
             self.save_cache()
 
 
@@ -622,7 +810,7 @@ def test_cache_persistence() -> Dict[str, Any]:
     
     # Test 5: Test cache optimization
     print("\n5. Testing cache optimization...")
-    cache2.optimize_cache(max_entries=2)
+    cache2.optimize_cache(new_max_size=2)
     
     # Cleanup
     print("\n6. Cleaning up test files...")
