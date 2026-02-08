@@ -102,7 +102,7 @@ typing-extensions==4.15.0
     #   llama-cpp-python
     #   sentence-transformers
     #   torch
-urllib3==2.6.1
+urllib3==2.6.3
     # via requests
 
 # The following packages are considered to be unsafe in a requirements file:
