@@ -40,7 +40,7 @@ class SemanticCache:
             self.model = SentenceTransformer('all-MiniLM-L6-v2')
             logger.info("Semantic cache initialized with all-MiniLM-L6-v2")
         except ImportError:
-            logger.warning("Warning: sentence-transformers not installed, using fallback")
+            logger.warning("sentence-transformers not installed, using fallback")
             self.model = None
     
     def vectorize(self, text: str) -> List[float]:
@@ -245,7 +245,7 @@ class SemanticCache:
                 logger.info(f"Error loading cache from JSON: {e}")
                 self.cache = []
         else:
-            logger.info(f"No JSON cache file found at {filepath}")
+            logger.debug(f"No JSON cache file found at {filepath}")
     
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get cache statistics"""
