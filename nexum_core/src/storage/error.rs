@@ -274,10 +274,17 @@ impl StorageError {
         let context = context.into();
 
         let suggestion = if !similar_keys.is_empty() {
-            format!(
-                "Did you mean one of these? {}\nUse 'SHOW TABLES' to see all available tables",
-                similar_keys.join(", ")
-            )
+            if similar_keys.len() == 1 {
+                format!(
+                    "Did you mean '{}'?\nUse 'SHOW TABLES' to see all available tables",
+                    similar_keys[0]
+                )
+            } else {
+                format!(
+                    "Did you mean one of these? {}\nUse 'SHOW TABLES' to see all available tables",
+                    similar_keys.join(", ")
+                )
+            }
         } else {
             "Use 'SHOW TABLES' to see all available tables or create it with 'CREATE TABLE'"
                 .to_string()
@@ -407,11 +414,12 @@ fn levenshtein_distance(s1: &str, s2: &str) -> usize {
     let len2 = s2.len();
     let mut matrix = vec![vec![0; len2 + 1]; len1 + 1];
 
-    for i in 0..=len1 {
-        matrix[i][0] = i;
+    for (i, row) in matrix.iter_mut().enumerate().take(len1 + 1) {
+        row[0] = i;
     }
-    for j in 0..=len2 {
-        matrix[0][j] = j;
+
+    for (j, cell) in matrix[0].iter_mut().enumerate().take(len2 + 1) {
+        *cell = j;
     }
 
     for (i, c1) in s1.chars().enumerate() {
@@ -429,7 +437,7 @@ fn levenshtein_distance(s1: &str, s2: &str) -> usize {
 impl From<sled::Error> for StorageError {
     fn from(err: sled::Error) -> Self {
         match err {
-            sled::Error::Io(io_err) => StorageError::write_error(io_err.to_string()),
+            sled::Error::Io(io_err) => StorageError::open_error(io_err.to_string()),
             sled::Error::Corruption { .. } => {
                 StorageError::read_error("Database corruption detected".to_string())
             }
