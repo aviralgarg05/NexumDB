@@ -1,12 +1,14 @@
 """
 Semantic cache and query optimizer using local embedding models
 """
-
+import logging
 import numpy as np
 from typing import Optional, List, Dict, Any
 import json
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__) 
 
 class SemanticCache:
     """
@@ -36,9 +38,9 @@ class SemanticCache:
         try:
             from sentence_transformers import SentenceTransformer
             self.model = SentenceTransformer('all-MiniLM-L6-v2')
-            print("Semantic cache initialized with all-MiniLM-L6-v2")
+            logger.info("Semantic cache initialized with all-MiniLM-L6-v2")
         except ImportError:
-            print("Warning: sentence-transformers not installed, using fallback")
+            logger.info("Warning: sentence-transformers not installed, using fallback")
             self.model = None
     
     def vectorize(self, text: str) -> List[float]:
@@ -80,7 +82,7 @@ class SemanticCache:
         for entry in self.cache:
             similarity = self.cosine_similarity(query_vec, entry['vector'])
             if similarity >= self.similarity_threshold:
-                print(f"Cache hit! Similarity: {similarity:.4f}")
+                logger.info(f"Cache hit! Similarity: {similarity:.4f}")
                 return entry['result']
         
         return None
@@ -93,7 +95,7 @@ class SemanticCache:
             'vector': query_vec,
             'result': result
         })
-        print(f"Cached query: {query[:50]}...")
+        logger.info(f"Cached query: {query[:50]}...")
     
     def clear(self) -> None:
         """Clear the cache"""
@@ -101,7 +103,7 @@ class SemanticCache:
         # Remove cache file when clearing
         if self.cache_path.exists():
             self.cache_path.unlink()
-            print("Cache file deleted")
+            logger.info("Cache file deleted")
     
     def save_cache(self, filepath: Optional[str] = None) -> None:
         """Save cache to disk using JSON format (secure default)"""
@@ -156,8 +158,8 @@ class SemanticCache:
                 self.cache = data.get('cache', [])
                 self.similarity_threshold = data.get('similarity_threshold', self.similarity_threshold)
                 
-                print(f"Semantic cache loaded from {filepath} ({len(self.cache)} entries)")
-                print("Note: Converting legacy pickle cache to JSON format for security")
+                logger.info(f"Semantic cache loaded from {filepath} ({len(self.cache)} entries)")
+                logger.info("Note: Converting legacy pickle cache to JSON format for security")
                 
                 # Validate cache entries
                 valid_entries = []
@@ -165,7 +167,7 @@ class SemanticCache:
                     if all(key in entry for key in ['query', 'vector', 'result']):
                         valid_entries.append(entry)
                     else:
-                        print("Warning: Invalid cache entry found and removed")
+                        logger.info("Warning: Invalid cache entry found and removed")
                 
                 self.cache = valid_entries
                 
@@ -173,11 +175,11 @@ class SemanticCache:
                 self.save_cache_json(json_filepath)
                 
             except Exception as e:
-                print(f"Error loading semantic cache: {e}")
-                print("Starting with empty cache")
+                logger.info(f"Error loading semantic cache: {e}")
+                logger.info("Starting with empty cache")
                 self.cache = []
         else:
-            print(f"No cache file found at {filepath}, starting with empty cache")
+            logger.info(f"No cache file found at {filepath}, starting with empty cache")
     
     def save_cache_json(self, filepath: Optional[str] = None) -> None:
         """Save cache to JSON format (secure and portable)"""
@@ -200,14 +202,14 @@ class SemanticCache:
             with open(filepath, 'w') as f:
                 json.dump(cache_data, f, indent=2)
             
-            print(f"Semantic cache saved to {filepath} ({len(self.cache)} entries)")
+            logger.info(f"Semantic cache saved to {filepath} ({len(self.cache)} entries)")
             
             # Remove backup if save was successful
             if os.path.exists(backup_path):
                 os.remove(backup_path)
             
         except Exception as e:
-            print(f"Error saving cache to JSON: {e}")
+            logger.info(f"Error saving cache to JSON: {e}")
             # Restore backup if save failed
             if os.path.exists(backup_path):
                 os.rename(backup_path, filepath)
@@ -225,13 +227,13 @@ class SemanticCache:
                 self.cache = data.get('cache', [])
                 self.similarity_threshold = data.get('similarity_threshold', self.similarity_threshold)
                 
-                print(f"Semantic cache loaded from JSON: {filepath} ({len(self.cache)} entries)")
+                logger.info(f"Semantic cache loaded from JSON: {filepath} ({len(self.cache)} entries)")
                 
             except Exception as e:
-                print(f"Error loading cache from JSON: {e}")
+                logger.info(f"Error loading cache from JSON: {e}")
                 self.cache = []
         else:
-            print(f"No JSON cache file found at {filepath}")
+            logger.info(f"No JSON cache file found at {filepath}")
     
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get cache statistics"""
@@ -295,14 +297,14 @@ class SemanticCache:
         """Remove cache entries older than specified hours (future enhancement)"""
         # This would require adding timestamps to cache entries
         # For now, just a placeholder for TTL functionality
-        print(f"Cache expiration set to {max_age_hours} hours (not yet implemented)")
+        logger.info(f"Cache expiration set to {max_age_hours} hours (not yet implemented)")
     
     def optimize_cache(self, max_entries: int = 1000) -> None:
         """Remove oldest entries if cache exceeds max size"""
         if len(self.cache) > max_entries:
             removed_count = len(self.cache) - max_entries
             self.cache = self.cache[-max_entries:]  # Keep most recent entries
-            print(f"Cache optimized: removed {removed_count} oldest entries")
+            logger.info(f"Cache optimized: removed {removed_count} oldest entries")
             self.save_cache()
 
 
@@ -347,7 +349,7 @@ class QueryOptimizer:
         new_q = current_q + self.learning_rate * (reward + self.discount_factor * max_next_q - current_q)
         self.q_table[state][action] = new_q
         
-        print(f"Updated Q({state}, {action}) = {new_q:.4f}")
+        logger.info(f"Updated Q({state}, {action}) = {new_q:.4f}")
     
     def feed_metrics(self, query: str, latency_ms: float) -> None:
         """Feed execution metrics to the optimizer"""
@@ -576,12 +578,12 @@ def format_explain_output(explain_result: Dict[str, Any]) -> str:
 
 def test_cache_persistence() -> Dict[str, Any]:
     """Test semantic cache persistence functionality"""
-    print("\n" + "="*60)
-    print("Testing Semantic Cache Persistence")
-    print("="*60 + "\n")
+    logger.info("\n" + "="*60)
+    logger.info("Testing Semantic Cache Persistence")
+    logger.info("="*60 + "\n")
     
     # Test 1: Create cache and add entries
-    print("1. Creating cache and adding test entries...")
+    logger.info("1. Creating cache and adding test entries...")
     cache1 = SemanticCache(cache_file="test_cache.pkl")
     
     test_queries = [
@@ -597,35 +599,35 @@ def test_cache_persistence() -> Dict[str, Any]:
     cache1.save_cache()
     
     stats1 = cache1.get_cache_stats()
-    print(f"Cache stats after adding entries: {stats1}")
+    logger.info(f"Cache stats after adding entries: {stats1}")
     
     # Test 2: Create new cache instance and verify persistence
-    print("\n2. Creating new cache instance to test persistence...")
+    logger.info("\n2. Creating new cache instance to test persistence...")
     cache2 = SemanticCache(cache_file="test_cache.pkl")
     
     stats2 = cache2.get_cache_stats()
-    print(f"Cache stats after reload: {stats2}")
+    logger.info(f"Cache stats after reload: {stats2}")
     
     # Test 3: Verify cache hits work after reload
-    print("\n3. Testing cache hits after reload...")
+    logger.info("\n3. Testing cache hits after reload...")
     for query, expected_result in test_queries:
         cached_result = cache2.get(query)
         if cached_result:
-            print(f"✓ Cache hit for: {query[:30]}...")
-            print(f"  Result: {cached_result[:50]}...")
+            logger.info(f"✓ Cache hit for: {query[:30]}...")
+            logger.info(f"  Result: {cached_result[:50]}...")
         else:
-            print(f"✗ Cache miss for: {query[:30]}...")
+            logger.info(f"✗ Cache miss for: {query[:30]}...")
     
     # Test 4: Test JSON export
-    print("\n4. Testing JSON export...")
+    logger.info("\n4. Testing JSON export...")
     cache2.save_cache_json("test_cache.json")
     
     # Test 5: Test cache optimization
-    print("\n5. Testing cache optimization...")
+    logger.info("\n5. Testing cache optimization...")
     cache2.optimize_cache(max_entries=2)
     
     # Cleanup
-    print("\n6. Cleaning up test files...")
+    logger.info("\n6. Cleaning up test files...")
     cache2.clear()
     
     return {
@@ -638,18 +640,18 @@ def test_cache_persistence() -> Dict[str, Any]:
 
 if __name__ == "__main__":
     # Run both tests
-    print("Running vectorization test...")
+    logger.info("Running vectorization test...")
     result = test_vectorization()
-    print(json.dumps(result, indent=2))
+    logger.info(json.dumps(result, indent=2))
     
-    print("\nRunning persistence test...")
+    logger.info("\nRunning persistence test...")
     persistence_result = test_cache_persistence()
-    print(f"\nPersistence test result: {persistence_result}")
+    logger.info(f"\nPersistence test result: {persistence_result}")
     
     # Test EXPLAIN functionality
-    print("\n" + "="*70)
-    print("Testing EXPLAIN Query Plan")
-    print("="*70)
+    logger.info("\n" + "="*70)
+    logger.info("Testing EXPLAIN Query Plan")
+    logger.info("="*70)
     
     # Add some test data to cache first
     cache = SemanticCache()
@@ -659,4 +661,4 @@ if __name__ == "__main__":
     # Test explain
     test_query = "SELECT * FROM users WHERE age > 30"
     explain_result = explain_query_plan(test_query, cache)
-    print(format_explain_output(explain_result))
+    logger.info(format_explain_output(explain_result))
