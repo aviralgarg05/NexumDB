@@ -77,7 +77,7 @@ scipy==1.11.4
     # via
     #   scikit-learn
     #   sentence-transformers
-sentence-transformers==5.1.2
+sentence-transformers==5.2.2
     # via -r requirements.txt
 sympy==1.14.0
     # via torch
