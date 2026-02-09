@@ -40,7 +40,7 @@ class SemanticCache:
             self.model = SentenceTransformer('all-MiniLM-L6-v2')
             logger.info("Semantic cache initialized with all-MiniLM-L6-v2")
         except ImportError:
-            logger.info("Warning: sentence-transformers not installed, using fallback")
+            logger.warning("Warning: sentence-transformers not installed, using fallback")
             self.model = None
     
     def vectorize(self, text: str) -> List[float]:
@@ -158,8 +158,15 @@ class SemanticCache:
                 self.cache = data.get('cache', [])
                 self.similarity_threshold = data.get('similarity_threshold', self.similarity_threshold)
                 
-                logger.info(f"Semantic cache loaded from {filepath} ({len(self.cache)} entries)")
-                logger.info("Note: Converting legacy pickle cache to JSON format for security")
+                logger.info(
+                    "Semantic cache loaded from %s (%d entries)",
+                    filepath,
+                    len(self.cache),
+                )
+
+                logger.info(
+                    "Converting legacy pickle cache to JSON format for security"
+                )
                 
                 # Validate cache entries
                 valid_entries = []
@@ -175,11 +182,16 @@ class SemanticCache:
                 self.save_cache_json(json_filepath)
                 
             except Exception as e:
-                logger.info(f"Error loading semantic cache: {e}")
-                logger.info("Starting with empty cache")
+                logger.exception(
+                    "Error loading semantic cache"
+                )
+
+                logger.debug(
+                    "Starting with empty cache"
+                )
                 self.cache = []
         else:
-            logger.info(f"No cache file found at {filepath}, starting with empty cache")
+            logger.debug(f"No cache file found at {filepath}, starting with empty cache")
     
     def save_cache_json(self, filepath: Optional[str] = None) -> None:
         """Save cache to JSON format (secure and portable)"""
@@ -349,7 +361,7 @@ class QueryOptimizer:
         new_q = current_q + self.learning_rate * (reward + self.discount_factor * max_next_q - current_q)
         self.q_table[state][action] = new_q
         
-        logger.info(f"Updated Q({state}, {action}) = {new_q:.4f}")
+        logger.debug(f"Updated Q({state}, {action}) = {new_q:.4f}")
     
     def feed_metrics(self, query: str, latency_ms: float) -> None:
         """Feed execution metrics to the optimizer"""
@@ -578,9 +590,9 @@ def format_explain_output(explain_result: Dict[str, Any]) -> str:
 
 def test_cache_persistence() -> Dict[str, Any]:
     """Test semantic cache persistence functionality"""
-    logger.info("\n" + "="*60)
-    logger.info("Testing Semantic Cache Persistence")
-    logger.info("="*60 + "\n")
+    logger.debug("=" * 60)
+    logger.debug("Testing Semantic Cache Persistence")
+    logger.debug("=" * 60)
     
     # Test 1: Create cache and add entries
     logger.info("1. Creating cache and adding test entries...")
