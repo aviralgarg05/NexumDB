@@ -1,7 +1,7 @@
 use crate::bridge::SemanticCache;
 use crate::catalog::Catalog;
 use crate::sql::types::{Column, DataType, SelectItem, Statement, Value};
-use crate::storage::{Result, StorageEngine, StorageError};
+use crate::storage::{find_similar_keys, Result, StorageEngine, StorageError};
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
@@ -66,7 +66,7 @@ impl Executor {
                     StorageError::key_not_found(
                         &table,
                         "INSERT query execution",
-                        crate::storage::find_similar_keys(&table, &similar, 2),
+                        find_similar_keys(&table, &similar, 2),
                     )
                 })?;
                 let prepared_rows = Self::prepare_insert_rows(&schema, &table, &columns, &values)?;
@@ -96,7 +96,7 @@ impl Executor {
                     StorageError::key_not_found(
                         &table,
                         "SELECT query execution",
-                        crate::storage::find_similar_keys(&table, &similar, 2),
+                        find_similar_keys(&table, &similar, 2),
                     )
                 })?;
 
@@ -217,7 +217,7 @@ impl Executor {
                     StorageError::key_not_found(
                         &name,
                         "DESCRIBE command",
-                        crate::storage::find_similar_keys(&name, &similar, 2),
+                        find_similar_keys(&name, &similar, 2),
                     )
                 })?;
                 Ok(ExecutionResult::TableDescription {
@@ -238,7 +238,7 @@ impl Executor {
                     return Err(StorageError::key_not_found(
                         &name,
                         "DROP TABLE command",
-                        crate::storage::find_similar_keys(&name, &similar, 2),
+                        find_similar_keys(&name, &similar, 2),
                     ));
                 }
 
@@ -266,7 +266,7 @@ impl Executor {
                     StorageError::key_not_found(
                         &table,
                         "DELETE query execution",
-                        crate::storage::find_similar_keys(&table, &similar, 2),
+                        find_similar_keys(&table, &similar, 2),
                     )
                 })?;
 
@@ -341,7 +341,7 @@ impl Executor {
                     StorageError::key_not_found(
                         &table,
                         "UPDATE query execution",
-                        crate::storage::find_similar_keys(&table, &similar, 2),
+                        find_similar_keys(&table, &similar, 2),
                     )
                 })?;
 
