@@ -97,7 +97,12 @@ fn main() -> anyhow::Result<()> {
         io::stdout().flush()?;
 
         let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
+        let bytes_read = io::stdin().read_line(&mut input)?;
+        if bytes_read == 0 {
+            // EOF reached (e.g., piped input exhausted)
+            println!("{}", "Goodbye! 👋".green().bold());
+            break;
+        }
 
         let input = input.trim();
 
@@ -115,8 +120,8 @@ fn main() -> anyhow::Result<()> {
             continue;
         }
 
-        if let Some(natural_query) = input.strip_prefix("ASK ").or_else(|| input.strip_prefix("ask ")) {
-            let natural_query = natural_query.trim();
+        if input.len() >= 4 && input[..4].eq_ignore_ascii_case("ASK ") {
+            let natural_query = input[4..].trim();
 
             if let Some(ref translator) = nl_translator {
                 let schema = get_schema_context(&catalog);
@@ -158,8 +163,8 @@ fn main() -> anyhow::Result<()> {
         }
 
         // Handle EXPLAIN command
-        if let Some(query_to_explain) = input.strip_prefix("EXPLAIN ").or_else(|| input.strip_prefix("explain ")) {
-            let query_to_explain = query_to_explain.trim();
+        if input.len() >= 8 && input[..8].eq_ignore_ascii_case("EXPLAIN ") {
+            let query_to_explain = input[8..].trim();
 
             if let Some(ref explainer) = query_explainer {
                 println!();
@@ -442,7 +447,9 @@ fn print_result_json(result: &ExecutionResult) {
             })
         }
     };
-    println!("{}", serde_json::to_string_pretty(&json).unwrap_or_else(|e| format!("{{\"error\": \"{}\"}}", e)));
+    println!("{}", serde_json::to_string_pretty(&json).unwrap_or_else(|e| {
+        serde_json::to_string(&serde_json::json!({ "error": e.to_string() })).unwrap_or_default()
+    }));
 }
 
 fn print_result_formatted(result: &ExecutionResult) {
@@ -524,13 +531,7 @@ fn print_result_formatted(result: &ExecutionResult) {
 }
 
 fn format_value(value: &nexum_core::sql::types::Value) -> String {
-    match value {
-        nexum_core::sql::types::Value::Integer(i) => i.to_string(),
-        nexum_core::sql::types::Value::Float(f) => f.to_string(),
-        nexum_core::sql::types::Value::Text(t) => t.clone(),
-        nexum_core::sql::types::Value::Boolean(b) => b.to_string(),
-        nexum_core::sql::types::Value::Null => "NULL".to_string(),
-    }
+    value.to_string()
 }
 
 fn value_to_json(value: &nexum_core::sql::types::Value) -> serde_json::Value {

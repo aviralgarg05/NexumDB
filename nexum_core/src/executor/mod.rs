@@ -676,13 +676,7 @@ impl Executor {
     }
 
     fn format_value(value: &Value) -> String {
-        match value {
-            Value::Integer(i) => i.to_string(),
-            Value::Float(f) => f.to_string(),
-            Value::Text(t) => t.clone(),
-            Value::Boolean(b) => b.to_string(),
-            Value::Null => "NULL".to_string(),
-        }
+        value.to_string()
     }
 
     fn build_cache_key(
