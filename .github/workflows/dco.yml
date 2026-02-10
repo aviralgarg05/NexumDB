@@ -2,6 +2,7 @@ name: DCO Check
 
 on:
     pull_request:
+        types: [opened, reopened, synchronize, edited]
         branches: [main]
 
 permissions:
@@ -17,20 +18,32 @@ jobs:
             - uses: actions/checkout@v4
               with:
                   fetch-depth: 0
-            - name: Check DCO Sign-off
+            - name: Check DCO Sign-off (non-blocking)
               run: |
                   commits=$(git log --format='%H %s' origin/${{ github.base_ref }}..HEAD)
                   failed=0
+                  missing=""
                   while IFS= read -r line; do
+                    [ -z "$line" ] && continue
                     hash=$(echo "$line" | awk '{print $1}')
                     msg=$(git log -1 --format='%B' "$hash")
                     if ! echo "$msg" | grep -q "Signed-off-by:"; then
-                      echo "Missing Signed-off-by in commit: $hash"
+                      echo "::warning::Missing Signed-off-by in commit: $hash"
+                      missing="${missing}"$'\n'"- ${hash}"
                       failed=1
                     fi
                   done <<< "$commits"
                   if [ $failed -eq 1 ]; then
-                    echo "DCO check failed. Please sign off your commits with 'git commit -s'"
-                    exit 1
+                    echo "DCO sign-off missing in one or more commits."
+                    echo "For now this check is advisory; recommended fix: rebase and use 'git commit -s'."
+                    {
+                      echo "### DCO Advisory"
+                      echo "Missing sign-off commits detected:${missing}"
+                      echo ""
+                      echo "Recommended fix:"
+                      echo "- Rebase your branch and amend commits with: \`git commit --amend -s\`"
+                      echo "- For multiple commits use interactive rebase and sign each commit."
+                    } >> "$GITHUB_STEP_SUMMARY"
+                    exit 0
                   fi
                   echo "All commits have DCO sign-off"

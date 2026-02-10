@@ -1,6 +1,9 @@
 name: PR Review Reminder
 
 on:
+    pull_request:
+        types: [opened, reopened, synchronize]
+        branches: [main]
     schedule:
         # Run every 6 hours
         - cron: '0 */6 * * *'
@@ -11,8 +14,16 @@ permissions:
     contents: read
 
 jobs:
+    pr-sync-check:
+        runs-on: ubuntu-latest
+        if: github.event_name == 'pull_request'
+        steps:
+            - name: PR sync trigger acknowledged
+              run: echo "PR synchronize trigger received for review reminder workflow."
+
     remind-reviewers:
         runs-on: ubuntu-latest
+        if: github.event_name != 'pull_request'
         steps:
             - name: Check for PRs awaiting review
               uses: actions/github-script@v7

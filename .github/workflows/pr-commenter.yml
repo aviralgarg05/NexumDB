@@ -2,7 +2,7 @@ name: PR Auto Commenter
 
 on:
     pull_request:
-        types: [opened, reopened]
+        types: [opened, reopened, synchronize]
 
 permissions:
     pull-requests: write
@@ -34,7 +34,10 @@ jobs:
                       const hasCIChanges = changedFiles.some(f => f.startsWith('.github/workflows/'));
                       const hasTestChanges = changedFiles.some(f => f.includes('test'));
 
-                      let comment = `## Thank you for your contribution, @${prAuthor}!\n\n`;
+                      const marker = '<!-- nexum-pr-auto-comment -->';
+
+                      let comment = `${marker}\n`;
+                      comment += `## Thank you for your contribution, @${prAuthor}!\n\n`;
                       comment += `### PR Analysis\n\n`;
                       comment += `**Files Changed:** ${files.length}\n`;
                       comment += `**Components:**\n`;
@@ -75,9 +78,29 @@ jobs:
                       comment += `**Tip:** CodeRabbit will automatically review your PR. Address any feedback before requesting human review.\n`;
                       comment += `New to contributing? Check out [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md) for guidelines.\n`;
 
-                      await github.rest.issues.createComment({
+                      const { data: comments } = await github.rest.issues.listComments({
                         owner: context.repo.owner,
                         repo: context.repo.repo,
                         issue_number: prNumber,
-                        body: comment
+                        per_page: 100
                       });
+
+                      const existing = comments.find(c =>
+                        c.user.type === 'Bot' && c.body && c.body.includes(marker)
+                      );
+
+                      if (existing) {
+                        await github.rest.issues.updateComment({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          comment_id: existing.id,
+                          body: comment
+                        });
+                      } else {
+                        await github.rest.issues.createComment({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: prNumber,
+                          body: comment
+                        });
+                      }

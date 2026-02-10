@@ -1,6 +1,9 @@
 name: Stale Issues and PRs
 
 on:
+    pull_request:
+        types: [opened, reopened, synchronize]
+        branches: [main]
     schedule:
         - cron: "30 1 * * *" # Run daily at 1:30 AM UTC
     workflow_dispatch:
@@ -10,8 +13,16 @@ permissions:
     pull-requests: write
 
 jobs:
+    pr-sync-check:
+        runs-on: ubuntu-latest
+        if: github.event_name == 'pull_request'
+        steps:
+            - name: PR sync trigger acknowledged
+              run: echo "PR synchronize trigger received for stale workflow."
+
     stale:
         runs-on: ubuntu-latest
+        if: github.event_name != 'pull_request'
         steps:
             - uses: actions/stale@v9
               with:
