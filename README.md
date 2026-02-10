@@ -194,22 +194,40 @@ Generated SQL: SELECT * FROM products WHERE price < 100 ORDER BY price ASC LIMIT
 ### Performance Examples
 
 **Advanced SQL Operators (v0.3.0):**
-```
-Query: SELECT * FROM products WHERE name LIKE 'Test%'
-Filtered 15 rows using WHERE clause
-Query executed in 2.9ms
+```sql
+-- LIKE patterns
+SELECT * FROM users WHERE name LIKE "%e"; -- ends with e
+SELECT * FROM users WHERE name LIKE "_l%"; -- second letter l
+SELECT * FROM products WHERE name NOT LIKE "%z%"; -- no z in name
 
-Query: SELECT * FROM items WHERE price BETWEEN 100 AND 500
-Filtered 42 rows using WHERE clause  
-Query executed in 3.1ms
+-- IN operator
+SELECT * FROM users WHERE age IN (30,40,50); -- specific ages
+SELECT * FROM products WHERE name NOT IN ('Alice','Bob'); -- exclude names
 
-Query: SELECT * FROM orders WHERE status IN ('active', 'pending')
-Filtered 28 rows using WHERE clause
-Query executed in 2.7ms
+-- BETWEEN operator
+SELECT * FROM products WHERE price BETWEEN 100 AND 500; -- price range
+SELECT * FROM users WHERE age NOT BETWEEN 40 AND 50; -- age outside range
+
+-- ORDER BY operator
+SELECT * FROM users ORDER BY age ASC, name DESC; -- sort by age then name
+SELECT * FROM products ORDER BY price LIMIT 3; -- sort and limit
+
+-- Combined queries
+SELECT * FROM products
+WHERE price BETWEEN 50 AND 1000 -- price filter
+  AND name LIKE "%apple%" -- pattern match
+  AND category IN ('phones') -- category filter
+ORDER BY price DESC, name;
+
+SELECT * FROM users
+WHERE age NOT BETWEEN 30 AND 35 -- exclude age range
+  OR name IN ('Alice','foo') -- name condition
+  AND age <= 50 -- extra condition
+ORDER BY name;
 ```
 
 **Query Modifiers:**
-```
+```sql
 Query: SELECT * FROM products ORDER BY price DESC LIMIT 5
 Sorted 150 rows using ORDER BY
 Limited to 5 rows using LIMIT
