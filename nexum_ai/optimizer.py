@@ -181,7 +181,7 @@ class SemanticCache:
                 # Auto-convert to JSON format for future use
                 self.save_cache_json(json_filepath)
                 
-            except Exception as e:
+            except Exception:
                 logger.exception(
                     "Error loading semantic cache"
                 )
@@ -220,8 +220,8 @@ class SemanticCache:
             if os.path.exists(backup_path):
                 os.remove(backup_path)
             
-        except Exception as e:
-            logger.info(f"Error saving cache to JSON: {e}")
+        except Exception:
+            logger.exception("Error saving cache to JSON")
             # Restore backup if save failed
             if os.path.exists(backup_path):
                 os.rename(backup_path, filepath)
@@ -241,8 +241,8 @@ class SemanticCache:
                 
                 logger.info(f"Semantic cache loaded from JSON: {filepath} ({len(self.cache)} entries)")
                 
-            except Exception as e:
-                logger.info(f"Error loading cache from JSON: {e}")
+            except Exception:
+                logger.exception("Error loading cache from JSON")
                 self.cache = []
         else:
             logger.debug(f"No JSON cache file found at {filepath}")
