@@ -63,12 +63,15 @@ fn main() -> anyhow::Result<()> {
     let spinner = create_spinner("Loading NL translator...");
     let nl_translator = match NLTranslator::new() {
         Ok(translator) => {
-            spinner.finish_with_message("✓ Natural Language translator enabled".green().to_string());
+            spinner
+                .finish_with_message("✓ Natural Language translator enabled".green().to_string());
             Some(translator)
         }
         Err(e) => {
             spinner.finish_with_message(
-                format!("⚠ NL translator not available: {}", e).yellow().to_string(),
+                format!("⚠ NL translator not available: {}", e)
+                    .yellow()
+                    .to_string(),
             );
             None
         }
@@ -82,7 +85,9 @@ fn main() -> anyhow::Result<()> {
         }
         Err(e) => {
             spinner.finish_with_message(
-                format!("⚠ Query explainer not available: {}", e).yellow().to_string(),
+                format!("⚠ Query explainer not available: {}", e)
+                    .yellow()
+                    .to_string(),
             );
             None
         }
@@ -130,11 +135,7 @@ fn main() -> anyhow::Result<()> {
                 match translator.translate(natural_query, &schema) {
                     Ok(sql) => {
                         spinner.finish_and_clear();
-                        println!(
-                            "{} {}",
-                            "Generated SQL:".cyan().bold(),
-                            sql.white()
-                        );
+                        println!("{} {}", "Generated SQL:".cyan().bold(), sql.white());
                         println!();
 
                         match SqlParser::parse(&sql) {
@@ -249,16 +250,8 @@ fn print_help_summary() {
         "•".cyan(),
         "EXPLAIN <query>".yellow()
     );
-    println!(
-        "  {} {} - Show full help",
-        "•".cyan(),
-        "help".yellow()
-    );
-    println!(
-        "  {} {} - Exit",
-        "•".cyan(),
-        "exit/quit".yellow()
-    );
+    println!("  {} {} - Show full help", "•".cyan(), "help".yellow());
+    println!("  {} {} - Exit", "•".cyan(), "exit/quit".yellow());
 }
 
 fn print_full_help() {
@@ -297,14 +290,8 @@ fn print_full_help() {
     println!("{}", "Special Commands:".yellow().bold());
     println!("  {} - List all tables", "SHOW TABLES".cyan());
     println!("  {} - Show table schema", "DESCRIBE <table>".cyan());
-    println!(
-        "  {} - Natural language query",
-        "ASK <question>".cyan()
-    );
-    println!(
-        "  {} - Query execution plan",
-        "EXPLAIN <query>".cyan()
-    );
+    println!("  {} - Natural language query", "ASK <question>".cyan());
+    println!("  {} - Query execution plan", "EXPLAIN <query>".cyan());
     println!();
 
     println!("{}", "Data Types:".yellow().bold());
@@ -330,16 +317,17 @@ fn print_full_help() {
         "  {}",
         "SELECT name, age FROM users WHERE age > 20 ORDER BY name".dimmed()
     );
-    println!(
-        "  {}",
-        "ASK show me all users older than 25".dimmed()
-    );
+    println!("  {}", "ASK show me all users older than 25".dimmed());
     println!();
     println!("{}", "═".repeat(60).cyan());
 }
 
 fn print_error(prefix: &str, message: &str) {
-    eprintln!("{} {}", format!("✗ {}:", prefix).red().bold(), message.red());
+    eprintln!(
+        "{} {}",
+        format!("✗ {}:", prefix).red().bold(),
+        message.red()
+    );
 }
 
 fn print_success(message: &str) {
@@ -447,9 +435,13 @@ fn print_result_json(result: &ExecutionResult) {
             })
         }
     };
-    println!("{}", serde_json::to_string_pretty(&json).unwrap_or_else(|e| {
-        serde_json::to_string(&serde_json::json!({ "error": e.to_string() })).unwrap_or_default()
-    }));
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json).unwrap_or_else(|e| {
+            serde_json::to_string(&serde_json::json!({ "error": e.to_string() }))
+                .unwrap_or_default()
+        })
+    );
 }
 
 fn print_result_formatted(result: &ExecutionResult) {
@@ -489,7 +481,12 @@ fn print_result_formatted(result: &ExecutionResult) {
             println!("{table}");
             println!(
                 "{}",
-                format!("({} row{})", rows.len(), if rows.len() == 1 { "" } else { "s" }).dimmed()
+                format!(
+                    "({} row{})",
+                    rows.len(),
+                    if rows.len() == 1 { "" } else { "s" }
+                )
+                .dimmed()
             );
         }
         ExecutionResult::Updated { table, rows } => {
