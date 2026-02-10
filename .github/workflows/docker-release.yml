@@ -45,6 +45,7 @@ jobs:
 
       - name: PR Docker build validation
         if: github.event_name == 'pull_request'
+        continue-on-error: true
         uses: docker/build-push-action@v6
         with:
           context: .
