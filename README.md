@@ -221,9 +221,7 @@ WHERE price BETWEEN 50 AND 1000 -- price filter
 ORDER BY price DESC, name;
 
 SELECT * FROM users
-WHERE age NOT BETWEEN 30 AND 35 -- exclude age range
-  OR name IN ('Alice', 'foo') -- name condition
-  AND age <= 50 -- extra condition
+WHERE (age NOT BETWEEN 30 AND 35) OR (name IN ('Alice', 'foo') AND age <= 50)
 ORDER BY name;
 ```
 
