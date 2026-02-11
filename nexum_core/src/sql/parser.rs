@@ -197,6 +197,7 @@ impl Parser {
                     Err(anyhow!("Unsupported query type"))
                 }
             }
+
             SqlStatement::Drop {
                 object_type,
                 if_exists,
