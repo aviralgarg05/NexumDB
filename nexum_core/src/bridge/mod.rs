@@ -447,8 +447,12 @@ mod tests {
         assert!(raw_plan.contains('{') || raw_plan.contains("["));
         // Validate structure by checking for actual expected keys present in output
         assert!(
-            raw_plan.contains("parsing") || raw_plan.contains("cache_analysis"),
-            "Raw output should contain structural keys like 'parsing' or 'cache_analysis'"
+            raw_plan.contains("parsing"),
+            "Raw output should contain required structural key 'parsing'"
+        );
+        assert!(
+            raw_plan.contains("cache_analysis"),
+            "Raw output should contain required structural key 'cache_analysis'"
         );
         println!("Raw explain output:\n{}", raw_plan);
     }

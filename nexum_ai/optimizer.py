@@ -609,7 +609,7 @@ def explain_query_plan(query: str, cache: Optional[SemanticCache] = None,
     try:
         result['cache_analysis'] = cache.explain_query(query)
     except Exception as e:
-        logger.warning(f"Cache analysis failed: {e}")
+        logger.warning("Cache analysis failed: %s", e)
         result['cache_analysis'] = {
             'cache_entries_checked': 0,
             'similarity_threshold': cache.similarity_threshold,
@@ -627,7 +627,7 @@ def explain_query_plan(query: str, cache: Optional[SemanticCache] = None,
     try:
         result['rl_agent'] = optimizer.explain_action(query, available_actions)
     except Exception as e:
-        logger.warning(f"RL agent analysis failed: {e}")
+        logger.warning("RL agent analysis failed: %s", e)
         # Use optimizer's actual epsilon value instead of hardcoded fallback
         result['rl_agent'] = {
             'state': 'unknown',
@@ -739,12 +739,23 @@ def format_explain_output(explain_result: Dict[str, Any]) -> str:
         c = explain_result.get('cache_analysis', {})
         # Defensive limits: cache_entries_checked capped at 99999 for display
         entries_checked = min(c.get('cache_entries_checked', 0), 99999)
-        threshold = c.get('similarity_threshold', 0.95)
-        best_sim = c.get('best_similarity', 0.0)
+        raw_threshold = c.get('similarity_threshold', 0.95)
+        raw_best_sim = c.get('best_similarity', 0.0)
+        try:
+            threshold = float(raw_threshold)
+        except (TypeError, ValueError):
+            threshold = 0.95
+        try:
+            best_sim = float(raw_best_sim)
+        except (TypeError, ValueError):
+            best_sim = 0.0
+        # Clamp numeric display fields so fixed-width rows remain aligned.
+        threshold = max(0.0, min(1.0, threshold))
+        best_sim = max(0.0, min(1.0, best_sim))
         would_hit = c.get('would_hit_cache', False)
         
-        lines.append(f"│ Entries checked: {entries_checked:<5} Threshold: {threshold:<6}            │")
-        lines.append(f"│ Best similarity: {best_sim:<6.4f} Would hit: {str(would_hit):<6}              │")
+        lines.append(f"│ Entries checked: {entries_checked:<5} Threshold: {threshold:>6.4f}            │")
+        lines.append(f"│ Best similarity: {best_sim:>6.4f} Would hit: {str(would_hit):<6}              │")
         
         top_matches = c.get('top_matches', [])
         if top_matches:
@@ -804,7 +815,7 @@ def format_explain_output(explain_result: Dict[str, Any]) -> str:
         return "\n".join(lines)
     
     except Exception as e:
-        logger.error(f"Error formatting EXPLAIN output: {e}")
+        logger.error("Error formatting EXPLAIN output: %s", e)
         # Return minimal but valid output with defensive width constraints
         error_msg = str(e)
         # Truncate long error messages to maintain 70-char width
