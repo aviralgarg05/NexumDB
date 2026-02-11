@@ -8,7 +8,28 @@ import json
 import os
 from pathlib import Path
 
-logger = logging.getLogger(__name__) 
+logger = logging.getLogger(__name__)
+
+# Module-level default cache instance (created once to avoid repeated initialization)
+_default_cache: Optional['SemanticCache'] = None
+
+def _get_default_cache() -> 'SemanticCache':
+    """
+    Get or create the default SemanticCache instance.
+    
+    This caches the default instance at module level to avoid repeated
+    initialization overhead (model loading, directory creation, disk I/O)
+    when explain_query_plan() is called multiple times without providing
+    a cache argument (e.g., in REPL loops).
+    
+    Returns:
+        SemanticCache: Module-level default cache instance
+    """
+    global _default_cache
+    if _default_cache is None:
+        _default_cache = SemanticCache()
+        logger.debug("Created module-level default SemanticCache instance")
+    return _default_cache 
 
 class SemanticCache:
     """
@@ -559,7 +580,8 @@ def explain_query_plan(query: str, cache: Optional[SemanticCache] = None,
     
     # 2. Cache Analysis
     if cache is None:
-        cache = SemanticCache()
+        # Use module-level default cache to avoid repeated initialization
+        cache = _get_default_cache()
     
     try:
         result['cache_analysis'] = cache.explain_query(query)
@@ -583,12 +605,13 @@ def explain_query_plan(query: str, cache: Optional[SemanticCache] = None,
         result['rl_agent'] = optimizer.explain_action(query, available_actions)
     except Exception as e:
         logger.warning(f"RL agent analysis failed: {e}")
+        # Use optimizer's actual epsilon value instead of hardcoded fallback
         result['rl_agent'] = {
             'state': 'unknown',
             'q_values': {a: 0.0 for a in available_actions},
             'best_action': 'full_scan',
-            'epsilon': 0.2,
-            'would_explore': False,
+            'epsilon': round(optimizer.epsilon, 4),  # Use actual optimizer epsilon
+            'would_explore': optimizer.epsilon > 0.0,
             'explanation': f'RL agent error: {str(e)}',
             'error': str(e)
         }
@@ -629,18 +652,25 @@ def format_explain_output(explain_result: Dict[str, Any]) -> str:
     
     Returns:
         Formatted string suitable for terminal display
-    
-    Raises:
-        ValueError: If explain_result is missing required keys
     """
-    # Validate input
+    # Defensive input validation - graceful fallback instead of raising
     if not isinstance(explain_result, dict):
-        raise ValueError("explain_result must be a dict")
+        return (
+            "=" * 70 + "\n"
+            "ERROR: Invalid explain_result format\n"
+            "=" * 70 + "\n"
+            "explain_result must be a dictionary\n"
+        )
     
     required_keys = ['query', 'parsing', 'cache_analysis', 'rl_agent', 'execution_strategy']
-    for key in required_keys:
-        if key not in explain_result:
-            raise ValueError(f"Missing required key in explain_result: {key}")
+    missing_keys = [k for k in required_keys if k not in explain_result]
+    if missing_keys:
+        return (
+            "=" * 70 + "\n"
+            "ERROR: Missing required keys in explain_result\n"
+            "=" * 70 + "\n"
+            f"Missing: {', '.join(missing_keys)}\n"
+        )
     
     def truncate(value: Any, max_len: int) -> str:
         """Truncate value to max length for box alignment"""
@@ -747,12 +777,17 @@ def format_explain_output(explain_result: Dict[str, Any]) -> str:
     
     except Exception as e:
         logger.error(f"Error formatting EXPLAIN output: {e}")
-        # Return minimal but valid output
+        # Return minimal but valid output with defensive width constraints
+        error_msg = str(e)
+        # Truncate long error messages to maintain 70-char width
+        if len(error_msg) > 60:
+            error_msg = error_msg[:57] + "..."
+        
         return (
             "=" * 70 + "\n"
             "QUERY EXECUTION PLAN (Error Formatting)\n"
             "=" * 70 + "\n"
-            f"Error: {str(e)}\n"
+            f"Error: {error_msg}\n"
             f"Query: {truncate(explain_result.get('query', 'Unknown'), 60)}\n"
         )
 

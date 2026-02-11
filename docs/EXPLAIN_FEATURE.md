@@ -5,7 +5,7 @@
 The `EXPLAIN` command provides comprehensive visibility into how NexumDB executes and optimizes queries. It shows the parsed SQL structure, cache analysis, and RL agent decision-making process with Q-values.
 
 **Status:** Issue #66 (Feature Implemented & Enhanced)  
-**PR:** #124 (Related: Configurable AI Embedding Model)
+**PR:** #131 (feat: Add EXPLAIN query plan command)
 
 ## Implementation Details
 
@@ -101,7 +101,7 @@ Generates complete query analysis combining:
 
 Formats the analysis into a terminal-friendly table with 5 sections:
 
-```
+```text
 ======================================================================
                        QUERY EXECUTION PLAN
 ======================================================================
@@ -171,7 +171,8 @@ Recommended execution plan:
 ## Usage Examples
 
 ### Interactive REPL
-```
+
+```bash
 nexumdb> EXPLAIN SELECT * FROM users WHERE age > 25
 [Shows complete query execution plan]
 
@@ -215,7 +216,7 @@ nexumdb> EXPLAIN SELECT COUNT(*) FROM orders WHERE status = 'active'
 
 ### Python Tests
 - **File:** `nexum_ai/tests/test_explain_integration.py`
-- **Coverage:** 18 comprehensive integration tests
+- **Coverage:** 17 comprehensive integration tests
   - Query type detection (SELECT, INSERT, UPDATE, DELETE, CREATE)
   - Cache hit/miss scenarios
   - Aggregation and JOIN detection
@@ -276,7 +277,7 @@ nexumdb> EXPLAIN SELECT COUNT(*) FROM orders WHERE status = 'active'
 - Example outputs in documentation
 
 ### Testing
-- 18 Python integration tests
+- 17 Python integration tests
 - 5 Rust bridge tests
 - Edge case coverage (empty queries, missing data, etc.)
 - Performance validation
@@ -327,5 +328,5 @@ pip install sentence-transformers torch numpy scikit-learn
 
 ---
 
-**Last Updated:** February 11, 2026  
+**Status:** Released in PR #131  
 **Maintainer:** NexumDB Core Team

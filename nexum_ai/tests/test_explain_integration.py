@@ -24,6 +24,23 @@ from nexum_ai.rl_agent import QLearningAgent
 class TestExplainIntegration:
     """Comprehensive integration tests for EXPLAIN feature"""
     
+    def setup_method(self):
+        """Setup: Create temporary directory for test caches to avoid disk artifacts"""
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.original_cache_file = os.environ.get('NEXUMDB_CACHE_FILE')
+        # Point cache operations to temporary directory for test isolation
+        os.environ['NEXUMDB_CACHE_FILE'] = os.path.join(self.temp_dir.name, 'test_cache.pkl')
+    
+    def teardown_method(self):
+        """Teardown: Clean up temporary directory and restore cache location"""
+        # Clean up temporary directory and all cache artifacts
+        self.temp_dir.cleanup()
+        # Restore original cache location
+        if self.original_cache_file is None:
+            os.environ.pop('NEXUMDB_CACHE_FILE', None)
+        else:
+            os.environ['NEXUMDB_CACHE_FILE'] = self.original_cache_file
+    
     def test_explain_select_query_with_where(self):
         """Test EXPLAIN output for SELECT with WHERE clause"""
         query = "SELECT * FROM users WHERE age > 25"
@@ -190,12 +207,15 @@ class TestExplainIntegration:
         assert best_action_q == best_q
     
     def test_explain_query_complexity_estimation(self):
-        """Test complexity estimation for various queries"""
+        """Test complexity estimation for various queries including boundary case"""
         # Complexity formula: min(len(query) // 20, 10)
+        # Tests include: low, mid, high, and upper-bound boundary case
         test_cases = [
             ("SELECT *", "SELECT", 0),  # 8 chars → 0
             ("SELECT id FROM users WHERE active", "SELECT", 1),  # 34 chars → 1
             ("SELECT a, b, c FROM users_table WHERE condition_a = 1 AND condition_b = 2 AND condition_c = 3", "SELECT", 4),  # 97 chars → 4
+            # Boundary case: 200+ char query should clamp to 10
+            ("SELECT id, name, email, phone, address, city, state, zip FROM customers WHERE status = 'active' AND created_date > '2024-01-01' AND account_balance > 100.00 AND subscription_level IN ('premium', 'enterprise') ORDER BY created_date DESC LIMIT 50", "SELECT", 10),  # 232 chars → 10 (clamped)
         ]
         
         for query, expected_type, expected_complexity in test_cases:
@@ -260,6 +280,33 @@ class TestExplainIntegration:
             result = explain_query_plan(query)
             parsing = result['parsing']
             assert parsing['has_group_by'] == should_have_group
+    
+    def test_explain_medication_queries_comprehensive(self):
+        """Test EXPLAIN for medical/healthcare domain queries with RL Agent validation"""
+        medication_query = "SELECT medication_id, drug_name, dosage FROM medications WHERE status = 'active' AND patient_count > 1000"
+        result = explain_query_plan(medication_query)
+        
+        # Verify parsing section
+        parsing = result['parsing']
+        assert parsing['query_type'] == 'SELECT'
+        assert parsing['has_where_clause'] is True
+        assert 'complexity_estimate' in parsing
+        
+        # CRITICAL: Verify RL_AGENT section is properly populated (this was Issue #11)
+        rl_agent = result['rl_agent']
+        assert 'q_values' in rl_agent, "RL Agent must contain Q-values"
+        assert 'best_action' in rl_agent, "RL Agent must have best action"
+        assert 'state' in rl_agent, "RL Agent must include state information"
+        assert isinstance(rl_agent['q_values'], dict), "Q-values must be a dictionary"
+        assert len(rl_agent['q_values']) > 0, "Q-values dictionary cannot be empty"
+        
+        # CRITICAL: Verify EXECUTION_STRATEGY section is present and complete
+        strategy = result['execution_strategy']
+        assert 'strategy' in strategy, "Strategy must specify execution approach"
+        assert 'estimated_latency' in strategy, "Strategy must include latency estimate"
+        assert 'will_cache_result' in strategy, "Strategy must indicate caching intent"
+        assert strategy['strategy'] in ['CACHE_HIT', 'CACHE_MISS_THEN_STORE', 'INDEX_SCAN', 'FULL_SCAN'], \
+               f"Invalid strategy: {strategy['strategy']}"
     
     def test_explain_cache_stats_consistency(self):
         """Test that cache statistics are consistent across multiple EXPLAIN calls"""

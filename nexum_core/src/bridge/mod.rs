@@ -331,7 +331,7 @@ mod tests {
             return;
         }
 
-        let explainer = super::QueryExplainer::new().unwrap();
+        let explainer = QueryExplainer::new().unwrap();
         let query = "SELECT * FROM users WHERE age > 25";
 
         let plan = explainer.explain(query).unwrap();
@@ -351,7 +351,7 @@ mod tests {
             return;
         }
 
-        let explainer = super::QueryExplainer::new().unwrap();
+        let explainer = QueryExplainer::new().unwrap();
 
         let test_queries = vec![
             "SELECT * FROM users",
@@ -399,7 +399,7 @@ mod tests {
             return;
         }
 
-        let explainer = super::QueryExplainer::new().unwrap();
+        let explainer = QueryExplainer::new().unwrap();
 
         let test_queries = vec![
             "INSERT INTO users (name, age) VALUES ('John', 30)",
@@ -434,13 +434,16 @@ mod tests {
             return;
         }
 
-        let explainer = super::QueryExplainer::new().unwrap();
+        let explainer = QueryExplainer::new().unwrap();
         let query = "SELECT * FROM users WHERE age > 25";
 
         let raw_plan = explainer.explain_raw(query).unwrap();
 
-        // Raw output should be valid Python dict format (contains {})
+        // Raw output should be valid Python dict format (contains {} and expected keys)
         assert!(raw_plan.contains('{') || raw_plan.contains("["));
+        // Validate structure by checking for expected keys
+        assert!(raw_plan.contains("parsing") || raw_plan.contains("optimization"), 
+                "Raw output should contain expected keys like 'parsing' or 'optimization'");
         println!("Raw explain output:\n{}", raw_plan);
     }
 
@@ -451,7 +454,7 @@ mod tests {
             return;
         }
 
-        let explainer = super::QueryExplainer::new().unwrap();
+        let explainer = QueryExplainer::new().unwrap();
         let query = "SELECT * FROM products WHERE price BETWEEN 10 AND 100";
 
         let plan = explainer.explain(query).unwrap();
