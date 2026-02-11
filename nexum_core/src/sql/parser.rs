@@ -197,6 +197,27 @@ impl Parser {
                     Err(anyhow!("Unsupported query type"))
                 }
             }
+            SqlStatement::Drop {
+                object_type,
+                if_exists,
+                names,
+                ..
+            } => {
+                // Handle DROP TABLE statements parsed by sqlparser
+                match object_type {
+                    ast::ObjectType::Table => {
+                        if names.len() != 1 {
+                            return Err(anyhow!("Can only drop one table at a time"));
+                        }
+                        let table_name = names[0].to_string();
+                        Ok(Statement::DropTable {
+                            name: table_name,
+                            if_exists: *if_exists,
+                        })
+                    }
+                    _ => Err(anyhow!("Only DROP TABLE is supported")),
+                }
+            }
             _ => Err(anyhow!("Unsupported statement type")),
         }
     }
@@ -516,6 +537,20 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_drop_table() {
+        let sql = "DROP TABLE users";
+        let stmt = Parser::parse(sql).unwrap();
+
+        match stmt {
+            Statement::DropTable { name, if_exists } => {
+                assert_eq!(name, "users");
+                assert!(!if_exists);
+            }
+            _ => panic!("Expected DropTable statement"),
+        }
+    }
+
+    #[test]
     fn test_parse_drop_table_if_exists() {
         let sql = "DROP TABLE IF EXISTS users";
         let stmt = Parser::parse(sql).unwrap();
@@ -524,6 +559,35 @@ mod tests {
             Statement::DropTable { name, if_exists } => {
                 assert_eq!(name, "users");
                 assert!(if_exists);
+            }
+            _ => panic!("Expected DropTable statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_drop_table_with_quotes() {
+        let sql = "DROP TABLE `users`";
+        let stmt = Parser::parse(sql).unwrap();
+
+        match stmt {
+            Statement::DropTable { name, if_exists } => {
+                assert_eq!(name, "users");
+                assert!(!if_exists);
+            }
+            _ => panic!("Expected DropTable statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_drop_table_sqlparser_syntax() {
+        // Test that sqlparser's DROP TABLE syntax also works
+        let sql = "DROP TABLE users";
+        let stmt = Parser::parse(sql).unwrap();
+        
+        match stmt {
+            Statement::DropTable { name, if_exists } => {
+                assert_eq!(name, "users");
+                assert!(!if_exists);
             }
             _ => panic!("Expected DropTable statement"),
         }
