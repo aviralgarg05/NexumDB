@@ -5,7 +5,7 @@
 The `EXPLAIN` command provides comprehensive visibility into how NexumDB executes and optimizes queries. It shows the parsed SQL structure, cache analysis, and RL agent decision-making process with Q-values.
 
 **Status:** Issue #66 (Feature Implemented & Enhanced)  
-**PR:** #124 (Related: Configurable AI Embedding Model)
+**PR:** #131 (feat: Add EXPLAIN query plan command)
 
 ## Implementation Details
 
