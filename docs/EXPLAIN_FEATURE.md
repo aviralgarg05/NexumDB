@@ -199,7 +199,7 @@ nexumdb> EXPLAIN SELECT COUNT(*) FROM orders WHERE status = 'active'
 ### Defensive Programming
 - Field width limits prevent output overflow
 - Query truncation at 60 characters
-- Action names truncated to 20 characters
+- Action names truncated to 15 characters
 - Cache entries capped at 99,999 for display
 - Epsilon value clamped to [0.0, 1.0] range
 
