@@ -442,8 +442,10 @@ mod tests {
         // Raw output should be valid Python dict format (contains {} and expected keys)
         assert!(raw_plan.contains('{') || raw_plan.contains("["));
         // Validate structure by checking for actual expected keys present in output
-        assert!(raw_plan.contains("parsing") || raw_plan.contains("cache_analysis"), 
-                "Raw output should contain structural keys like 'parsing' or 'cache_analysis'");
+        assert!(
+            raw_plan.contains("parsing") || raw_plan.contains("cache_analysis"),
+            "Raw output should contain structural keys like 'parsing' or 'cache_analysis'"
+        );
         println!("Raw explain output:\n{}", raw_plan);
     }
 
