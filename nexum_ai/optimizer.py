@@ -465,8 +465,8 @@ class QueryOptimizer:
         # Input validation
         if not query or not isinstance(query, str):
             raise ValueError("Query must be a non-empty string")
-        if not available_actions or not isinstance(available_actions, list):
-            raise ValueError("available_actions must be a non-empty list")
+        if not available_actions or not isinstance(available_actions, (list, tuple)):
+            raise ValueError("available_actions must be a non-empty list or tuple")
         
         state = f"query_type_{len(query) // 10}"
         
@@ -737,7 +737,7 @@ def format_explain_output(explain_result: Dict[str, Any]) -> str:
         # Defensive truncation for state (30 chars) and best_action (20 chars)
         state_display = truncate(r.get('state', 'unknown'), 30)
         best_action_display = truncate(r.get('best_action', 'N/A'), 20)
-        epsilon = r.get('epsilon', 0.2)
+        epsilon = r.get('epsilon', 0.1)
         
         lines.append(f"│ State: {state_display:<30} Epsilon: {epsilon:<6.4f}        │")
         lines.append(f"│ Best action: {best_action_display:<20}                          │")
