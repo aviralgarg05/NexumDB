@@ -676,13 +676,7 @@ impl Executor {
     }
 
     fn format_value(value: &Value) -> String {
-        match value {
-            Value::Integer(i) => i.to_string(),
-            Value::Float(f) => f.to_string(),
-            Value::Text(t) => t.clone(),
-            Value::Boolean(b) => b.to_string(),
-            Value::Null => "NULL".to_string(),
-        }
+        value.to_string()
     }
 
     fn build_cache_key(
@@ -833,7 +827,7 @@ mod tests {
         assert!(result.is_err(), "Dropping a non-existent table should return an error");
     }
 
-    //second test
+    // second test
     #[test]
     fn test_verify_physical_deletion() {
         // 1. Setup Engine
