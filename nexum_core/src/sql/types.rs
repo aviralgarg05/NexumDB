@@ -55,10 +55,27 @@ pub struct TableSchema {
     pub columns: Vec<Column>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AggregateType {
+    Count,
+    Sum,
+    Avg,
+    Min,
+    Max,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SelectItem {
     Wildcard,
-    Column { name: String, alias: Option<String> },
+    Column {
+        name: String,
+        alias: Option<String>,
+    },
+    Aggregate {
+        func: AggregateType,
+        column: Option<String>, // None for COUNT(*)
+        alias: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone)]
