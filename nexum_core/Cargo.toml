@@ -23,6 +23,11 @@ log = "0.4"
 [dev-dependencies]
 tempfile = "3.24"
 criterion = { version = "0.5", features = ["html_reports"] }
+rusqlite = "0.31.0" # To interface with SQLite for comparison
+
+[[bench]]
+name = "db_comparison"
+harness = false
 
 [[bench]]
 name = "storage_bench"
