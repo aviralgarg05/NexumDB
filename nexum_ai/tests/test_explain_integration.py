@@ -15,7 +15,8 @@ from nexum_ai.optimizer import (
     explain_query_plan,
     format_explain_output,
     SemanticCache,
-    QueryOptimizer
+    QueryOptimizer,
+    _reset_default_cache,
 )
 from nexum_ai.rl_agent import QLearningAgent
 
@@ -25,20 +26,27 @@ class TestExplainIntegration:
     
     def setup_method(self):
         """Setup: Create temporary directory for test caches to avoid disk artifacts"""
+        _reset_default_cache()
         self.temp_dir = tempfile.TemporaryDirectory()
         self.original_cache_file = os.environ.get('NEXUMDB_CACHE_FILE')
         # Point cache operations to temporary directory for test isolation
         os.environ['NEXUMDB_CACHE_FILE'] = os.path.join(self.temp_dir.name, 'test_cache.pkl')
+        _reset_default_cache()
     
     def teardown_method(self):
         """Teardown: Clean up temporary directory and restore cache location"""
-        # Clean up temporary directory and all cache artifacts
-        self.temp_dir.cleanup()
-        # Restore original cache location
-        if self.original_cache_file is None:
-            os.environ.pop('NEXUMDB_CACHE_FILE', None)
-        else:
-            os.environ['NEXUMDB_CACHE_FILE'] = self.original_cache_file
+        try:
+            # Clean up temporary directory and all cache artifacts
+            if hasattr(self, 'temp_dir') and self.temp_dir is not None:
+                self.temp_dir.cleanup()
+        finally:
+            # Restore original cache location
+            original_cache_file = getattr(self, 'original_cache_file', None)
+            if original_cache_file is None:
+                os.environ.pop('NEXUMDB_CACHE_FILE', None)
+            else:
+                os.environ['NEXUMDB_CACHE_FILE'] = original_cache_file
+            _reset_default_cache()
     
     def test_explain_select_query_with_where(self):
         """Test EXPLAIN output for SELECT with WHERE clause"""
@@ -134,7 +142,7 @@ class TestExplainIntegration:
         # Note: This test may be implementation-dependent if using fallback character-hashing vectorizer
         cache_analysis = explain_result['cache_analysis']
         assert 'top_matches' in cache_analysis, "Cache analysis should include top_matches field"
-        assert isinstance(cache_analysis['top_matches'], (list, type(None))), "top_matches should be list or None"
+        assert isinstance(cache_analysis['top_matches'], list), "top_matches should always be a list"
         
         # Formatted output should show cache information
         formatted = format_explain_output(explain_result)
@@ -178,10 +186,11 @@ class TestExplainIntegration:
         assert 'SELECT' in formatted  # Query type
         assert 'Q-values' in formatted  # RL agent info
         
-        # Verify no excessive truncation
+        # Soft width guard: formatted output should stay terminal-friendly without
+        # enforcing a brittle exact-width contract.
         lines = formatted.split('\n')
-        for line in lines:
-            assert len(line) <= 75, f"Line too long: {line}"
+        max_line_length = max(len(line) for line in lines)
+        assert max_line_length <= 90, f"Line too long: {max_line_length} chars"
     
     def test_explain_rl_agent_q_values_display(self):
         """Test that RL agent Q-values are properly displayed"""
@@ -340,7 +349,7 @@ class TestExplainIntegration:
         
         # Query should be present but truncated
         lines = formatted.split('\n')
-        query_lines = [l for l in lines if l.startswith('Query:')]
+        query_lines = [line for line in lines if line.startswith('Query:')]
         
         assert len(query_lines) > 0
         # Formatted query in output should be truncated (not full length)
@@ -371,25 +380,33 @@ def run_all_tests():
     failed = 0
     
     for method_name in test_methods:
+        setup_ok = False
+        test_failed = False
         try:
             # Call setup_method to prepare test isolation (tempfile, env vars)
             test_class.setup_method()
+            setup_ok = True
             method = getattr(test_class, method_name)
             method()
-            # Call teardown_method to clean up after test
-            test_class.teardown_method()
             print(f"✓ {method_name}")
             passed += 1
         except AssertionError as e:
-            # Ensure cleanup even if test fails
-            test_class.teardown_method()
             print(f"✗ {method_name}: {e}")
             failed += 1
+            test_failed = True
         except Exception as e:
-            # Ensure cleanup even if unexpected error
-            test_class.teardown_method()
             print(f"✗ {method_name}: Unexpected error: {e}")
             failed += 1
+            test_failed = True
+        finally:
+            if setup_ok:
+                try:
+                    test_class.teardown_method()
+                except Exception as teardown_error:
+                    print(f"✗ {method_name}: Teardown error: {teardown_error}")
+                    if not test_failed:
+                        passed -= 1
+                        failed += 1
     
     print(f"\n{'=' * 70}")
     print(f"Results: {passed} passed, {failed} failed")

@@ -10,8 +10,15 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Module-level default cache instance (created once to avoid repeated initialization)
+# Shared constants for defensive formatting and display alignment.
+ACTION_DISPLAY_WIDTH = 20
+COMPLEXITY_MIN = 0
+COMPLEXITY_MAX = 10
+
+# Module-level default cache instance (created once to avoid repeated initialization).
+# Track cache file source so env var changes can rebuild the instance safely.
 _default_cache: Optional['SemanticCache'] = None
+_default_cache_file: Optional[str] = None
 
 def _get_default_cache() -> 'SemanticCache':
     """
@@ -25,11 +32,23 @@ def _get_default_cache() -> 'SemanticCache':
     Returns:
         SemanticCache: Module-level default cache instance
     """
-    global _default_cache
-    if _default_cache is None:
-        _default_cache = SemanticCache()
-        logger.debug("Created module-level default SemanticCache instance")
-    return _default_cache 
+    global _default_cache, _default_cache_file
+    current_cache_file = os.environ.get('NEXUMDB_CACHE_FILE', "semantic_cache.pkl")
+    if _default_cache is None or _default_cache_file != current_cache_file:
+        _default_cache = SemanticCache(cache_file=current_cache_file)
+        _default_cache_file = current_cache_file
+        logger.debug(
+            "Created module-level default SemanticCache instance for cache_file=%s",
+            current_cache_file
+        )
+    return _default_cache
+
+
+def _reset_default_cache() -> None:
+    """Reset module-level default cache instance (primarily for test isolation)."""
+    global _default_cache, _default_cache_file
+    _default_cache = None
+    _default_cache_file = None
 
 class SemanticCache:
     """
@@ -484,8 +503,12 @@ class QueryOptimizer:
         # Find best action with defensive handling
         best_action = max(available_actions, key=lambda a: q_values.get(a, 0.0))
         
-        # Defensive truncation for display (limit to 20 chars)
-        best_action_display = best_action[:20] if len(best_action) > 20 else best_action
+        # Defensive truncation for display to keep formatting consistent.
+        best_action_display = (
+            best_action[:ACTION_DISPLAY_WIDTH]
+            if len(best_action) > ACTION_DISPLAY_WIDTH
+            else best_action
+        )
         
         # Ensure epsilon is in valid range [0, 1]
         epsilon_safe = max(0.0, min(1.0, self.epsilon))
@@ -570,7 +593,7 @@ def explain_query_plan(query: str, cache: Optional[SemanticCache] = None,
     result['parsing'] = {
         'query_type': query_type,
         'query_length': len(query),
-        'complexity_estimate': min(len(query) // 20, 10),
+        'complexity_estimate': min(len(query) // 20, COMPLEXITY_MAX),
         'has_where_clause': 'WHERE' in query_upper,
         'has_join': 'JOIN' in query_upper,
         'has_aggregation': any(agg in query_upper for agg in ['COUNT', 'SUM', 'AVG', 'MAX', 'MIN']),
@@ -696,7 +719,12 @@ def format_explain_output(explain_result: Dict[str, Any]) -> str:
         lines.append("┌─ PARSING ─────────────────────────────────────────────────────────┐")
         p = explain_result.get('parsing', {})
         query_type = truncate(p.get('query_type', 'UNKNOWN'), 15)
-        complexity = p.get('complexity_estimate', 0)
+        raw_complexity = p.get('complexity_estimate', 0)
+        try:
+            complexity = int(float(raw_complexity))
+        except (TypeError, ValueError):
+            complexity = COMPLEXITY_MIN
+        complexity = max(COMPLEXITY_MIN, min(COMPLEXITY_MAX, complexity))
         lines.append(f"│ Type: {query_type:<15} Complexity: {complexity}/10              │")
         
         has_where = p.get('has_where_clause', False)
@@ -746,13 +774,13 @@ def format_explain_output(explain_result: Dict[str, Any]) -> str:
         q_values = r.get('q_values', {})
         if q_values:
             for action, qval in q_values.items():
-                # Truncate action names to 15 chars for alignment
-                action_display = truncate(action, 15)
+                # Keep action width aligned with explain_action() best_action display.
+                action_display = truncate(action, ACTION_DISPLAY_WIDTH)
                 try:
                     q_val_float = float(qval)
-                    lines.append(f"│   {action_display:<15}: {q_val_float:>8.4f}                                    │")
+                    lines.append(f"│   {action_display:<20}: {q_val_float:>8.4f}                                │")
                 except (ValueError, TypeError):
-                    lines.append(f"│   {action_display:<15}: N/A                                          │")
+                    lines.append(f"│   {action_display:<20}: N/A                                      │")
         else:
             lines.append("│   (no Q-values available)                                        │")
         

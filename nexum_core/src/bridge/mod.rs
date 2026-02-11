@@ -362,7 +362,7 @@ mod tests {
 
         for query in test_queries {
             let plan = explainer.explain(query).unwrap();
-            
+
             // Verify all required sections are present
             assert!(
                 plan.contains("PARSING"),
@@ -384,10 +384,14 @@ mod tests {
                 "Missing EXECUTION STRATEGY section for: {}",
                 query
             );
-            
+
             // Verify query type detection
             if query.to_uppercase().starts_with("SELECT") {
-                assert!(plan.contains("SELECT"), "Query type not detected for: {}", query);
+                assert!(
+                    plan.contains("SELECT"),
+                    "Query type not detected for: {}",
+                    query
+                );
             }
         }
     }
@@ -409,12 +413,12 @@ mod tests {
 
         for query in test_queries {
             let plan = explainer.explain(query).unwrap();
-            
+
             // All sections should be present
             assert!(plan.contains("PARSING"));
             assert!(plan.contains("CACHE LOOKUP"));
             assert!(plan.contains("EXECUTION STRATEGY"));
-            
+
             // Detect mutation query types
             let upper = query.to_uppercase();
             if upper.starts_with("INSERT") {
