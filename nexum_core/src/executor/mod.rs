@@ -818,6 +818,60 @@ mod tests {
     use super::*;
     use crate::sql::types::{Column, DataType, SelectItem};
 
+    //added a test that checks if dropping a non-existent table without IF EXISTS fails correctly.
+    #[test]
+    fn test_drop_non_existent_table_fails() {
+        let storage = StorageEngine::memory().unwrap();
+        let executor = Executor::new(storage);
+
+        let drop = Statement::DropTable {
+            name: "imaginary_table".to_string(),
+            if_exists: false,
+        };
+        
+        let result = executor.execute(drop);
+        assert!(result.is_err(), "Dropping a non-existent table should return an error");
+    }
+
+    //second test
+    #[test]
+    fn test_verify_physical_deletion() {
+        // 1. Setup Engine
+        let storage = StorageEngine::memory().unwrap();
+        let executor = Executor::new(storage.clone());
+        let table_name = "cleanup_test";
+
+        // 2. Create and Insert Data
+        let create = Statement::CreateTable {
+            name: table_name.to_string(),
+            columns: vec![Column { name: "id".to_string(), data_type: DataType::Integer }],
+        };
+        executor.execute(create).unwrap();
+
+        let insert = Statement::Insert {
+            table: table_name.to_string(),
+            columns: vec!["id".to_string()],
+            values: vec![vec![Value::Integer(1)], vec![Value::Integer(2)]],
+        };
+        executor.execute(insert).unwrap();
+
+        // 3. Verify data exists in raw storage before DROP
+        let prefix = format!("data:{}:", table_name).into_bytes();
+        let rows_before = storage.scan_prefix(&prefix).unwrap();
+        assert_eq!(rows_before.len(), 2, "Data should exist before DROP");
+
+        // 4. Execute DROP
+        let drop = Statement::DropTable {
+            name: table_name.to_string(),
+            if_exists: false,
+        };
+        executor.execute(drop).unwrap();
+
+        // 5. THE CRITICAL CHECK: Scan raw storage again
+        let rows_after = storage.scan_prefix(&prefix).unwrap();
+        assert_eq!(rows_after.len(), 0, "PHYSICAL WIPE FAILED: Raw data still exists in storage after DROP!");
+    }
+
     #[test]
     fn test_end_to_end_execution() {
         let storage = StorageEngine::memory().unwrap();
