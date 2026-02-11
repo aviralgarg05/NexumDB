@@ -343,4 +343,122 @@ mod tests {
         assert!(plan.contains("RL AGENT"));
         assert!(plan.contains("EXECUTION STRATEGY"));
     }
+
+    #[test]
+    fn test_query_explainer_select_queries() {
+        if !check_python_available() {
+            println!("Skipping test: Python environment not available");
+            return;
+        }
+
+        let explainer = super::QueryExplainer::new().unwrap();
+
+        let test_queries = vec![
+            "SELECT * FROM users",
+            "SELECT id, name FROM users WHERE age > 25",
+            "SELECT COUNT(*) FROM orders WHERE status = 'active'",
+            "SELECT * FROM products ORDER BY price DESC LIMIT 10",
+        ];
+
+        for query in test_queries {
+            let plan = explainer.explain(query).unwrap();
+            
+            // Verify all required sections are present
+            assert!(
+                plan.contains("PARSING"),
+                "Missing PARSING section for: {}",
+                query
+            );
+            assert!(
+                plan.contains("CACHE LOOKUP"),
+                "Missing CACHE LOOKUP section for: {}",
+                query
+            );
+            assert!(
+                plan.contains("RL AGENT"),
+                "Missing RL AGENT section for: {}",
+                query
+            );
+            assert!(
+                plan.contains("EXECUTION STRATEGY"),
+                "Missing EXECUTION STRATEGY section for: {}",
+                query
+            );
+            
+            // Verify query type detection
+            if query.to_uppercase().starts_with("SELECT") {
+                assert!(plan.contains("SELECT"), "Query type not detected for: {}", query);
+            }
+        }
+    }
+
+    #[test]
+    fn test_query_explainer_mutation_queries() {
+        if !check_python_available() {
+            println!("Skipping test: Python environment not available");
+            return;
+        }
+
+        let explainer = super::QueryExplainer::new().unwrap();
+
+        let test_queries = vec![
+            "INSERT INTO users (name, age) VALUES ('John', 30)",
+            "UPDATE users SET age = 31 WHERE name = 'John'",
+            "DELETE FROM users WHERE id = 1",
+        ];
+
+        for query in test_queries {
+            let plan = explainer.explain(query).unwrap();
+            
+            // All sections should be present
+            assert!(plan.contains("PARSING"));
+            assert!(plan.contains("CACHE LOOKUP"));
+            assert!(plan.contains("EXECUTION STRATEGY"));
+            
+            // Detect mutation query types
+            let upper = query.to_uppercase();
+            if upper.starts_with("INSERT") {
+                assert!(plan.contains("INSERT"));
+            } else if upper.starts_with("UPDATE") {
+                assert!(plan.contains("UPDATE"));
+            } else if upper.starts_with("DELETE") {
+                assert!(plan.contains("DELETE"));
+            }
+        }
+    }
+
+    #[test]
+    fn test_query_explainer_raw_output() {
+        if !check_python_available() {
+            println!("Skipping test: Python environment not available");
+            return;
+        }
+
+        let explainer = super::QueryExplainer::new().unwrap();
+        let query = "SELECT * FROM users WHERE age > 25";
+
+        let raw_plan = explainer.explain_raw(query).unwrap();
+
+        // Raw output should be valid Python dict format (contains {})
+        assert!(raw_plan.contains('{') || raw_plan.contains("["));
+        println!("Raw explain output:\n{}", raw_plan);
+    }
+
+    #[test]
+    fn test_query_explainer_q_values_present() {
+        if !check_python_available() {
+            println!("Skipping test: Python environment not available");
+            return;
+        }
+
+        let explainer = super::QueryExplainer::new().unwrap();
+        let query = "SELECT * FROM products WHERE price BETWEEN 10 AND 100";
+
+        let plan = explainer.explain(query).unwrap();
+
+        // RL Agent section should contain Q-values information
+        assert!(plan.contains("Q-values"));
+        assert!(plan.contains("Best action"));
+        println!("Q-values information present in plan");
+    }
 }
