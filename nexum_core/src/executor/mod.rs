@@ -828,9 +828,12 @@ mod tests {
             name: "imaginary_table".to_string(),
             if_exists: false,
         };
-        
+
         let result = executor.execute(drop);
-        assert!(result.is_err(), "Dropping a non-existent table should return an error");
+        assert!(
+            result.is_err(),
+            "Dropping a non-existent table should return an error"
+        );
     }
 
     //second test
@@ -844,7 +847,10 @@ mod tests {
         // 2. Create and Insert Data
         let create = Statement::CreateTable {
             name: table_name.to_string(),
-            columns: vec![Column { name: "id".to_string(), data_type: DataType::Integer }],
+            columns: vec![Column {
+                name: "id".to_string(),
+                data_type: DataType::Integer,
+            }],
         };
         executor.execute(create).unwrap();
 
@@ -869,7 +875,11 @@ mod tests {
 
         // 5. THE CRITICAL CHECK: Scan raw storage again
         let rows_after = storage.scan_prefix(&prefix).unwrap();
-        assert_eq!(rows_after.len(), 0, "PHYSICAL WIPE FAILED: Raw data still exists in storage after DROP!");
+        assert_eq!(
+            rows_after.len(),
+            0,
+            "PHYSICAL WIPE FAILED: Raw data still exists in storage after DROP!"
+        );
     }
 
     #[test]
