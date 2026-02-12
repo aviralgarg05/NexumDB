@@ -31,6 +31,18 @@ impl Value {
     }
 }
 
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Integer(i) => write!(f, "{}", i),
+            Value::Float(v) => write!(f, "{}", v),
+            Value::Text(t) => write!(f, "{}", t),
+            Value::Boolean(b) => write!(f, "{}", b),
+            Value::Null => write!(f, "NULL"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Column {
     pub name: String,

@@ -1,7 +1,7 @@
 use crate::bridge::SemanticCache;
 use crate::catalog::Catalog;
 use crate::sql::types::{Column, DataType, SelectItem, Statement, Value};
-use crate::storage::{Result, StorageEngine, StorageError};
+use crate::storage::{find_similar_keys, Result, StorageEngine, StorageError};
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
@@ -61,11 +61,14 @@ impl Executor {
                 columns,
                 values,
             } => {
-                let schema = self
-                    .catalog
-                    .get_table(&table)?
-                    .ok_or_else(|| StorageError::ReadError(format!("Table {} not found", table)))?;
-
+                let schema = self.catalog.get_table(&table)?.ok_or_else(|| {
+                    let similar = self.catalog.list_tables().unwrap_or_default();
+                    StorageError::key_not_found(
+                        &table,
+                        "INSERT query execution",
+                        find_similar_keys(&table, &similar, 2),
+                    )
+                })?;
                 let prepared_rows = Self::prepare_insert_rows(&schema, &table, &columns, &values)?;
 
                 for row in prepared_rows {
@@ -88,10 +91,14 @@ impl Executor {
                 order_by,
                 limit,
             } => {
-                let schema = self
-                    .catalog
-                    .get_table(&table)?
-                    .ok_or_else(|| StorageError::ReadError(format!("Table {} not found", table)))?;
+                let schema = self.catalog.get_table(&table)?.ok_or_else(|| {
+                    let similar = self.catalog.list_tables().unwrap_or_default();
+                    StorageError::key_not_found(
+                        &table,
+                        "SELECT query execution",
+                        find_similar_keys(&table, &similar, 2),
+                    )
+                })?;
 
                 let (projection_indices, output_columns) =
                     Self::build_projection(&schema, &projection)?;
@@ -205,10 +212,14 @@ impl Executor {
                 Ok(ExecutionResult::TableList { tables })
             }
             Statement::DescribeTable { name } => {
-                let schema = self
-                    .catalog
-                    .get_table(&name)?
-                    .ok_or_else(|| StorageError::ReadError(format!("Table {} not found", name)))?;
+                let schema = self.catalog.get_table(&name)?.ok_or_else(|| {
+                    let similar = self.catalog.list_tables().unwrap_or_default();
+                    StorageError::key_not_found(
+                        &name,
+                        "DESCRIBE command",
+                        find_similar_keys(&name, &similar, 2),
+                    )
+                })?;
                 Ok(ExecutionResult::TableDescription {
                     table: name,
                     columns: schema.columns,
@@ -223,7 +234,12 @@ impl Executor {
                             rows: 0,
                         });
                     }
-                    return Err(StorageError::ReadError(format!("Table {} not found", name)));
+                    let similar = self.catalog.list_tables().unwrap_or_default();
+                    return Err(StorageError::key_not_found(
+                        &name,
+                        "DROP TABLE command",
+                        find_similar_keys(&name, &similar, 2),
+                    ));
                 }
 
                 let prefix = Self::table_data_prefix(&name);
@@ -245,10 +261,14 @@ impl Executor {
                 table,
                 where_clause,
             } => {
-                let schema = self
-                    .catalog
-                    .get_table(&table)?
-                    .ok_or_else(|| StorageError::ReadError(format!("Table {} not found", table)))?;
+                let schema = self.catalog.get_table(&table)?.ok_or_else(|| {
+                    let similar = self.catalog.list_tables().unwrap_or_default();
+                    StorageError::key_not_found(
+                        &table,
+                        "DELETE query execution",
+                        find_similar_keys(&table, &similar, 2),
+                    )
+                })?;
 
                 let prefix = Self::table_data_prefix(&table);
 
@@ -316,10 +336,14 @@ impl Executor {
                 assignments,
                 where_clause,
             } => {
-                let schema = self
-                    .catalog
-                    .get_table(&table)?
-                    .ok_or_else(|| StorageError::ReadError(format!("Table {} not found", table)))?;
+                let schema = self.catalog.get_table(&table)?.ok_or_else(|| {
+                    let similar = self.catalog.list_tables().unwrap_or_default();
+                    StorageError::key_not_found(
+                        &table,
+                        "UPDATE query execution",
+                        find_similar_keys(&table, &similar, 2),
+                    )
+                })?;
 
                 let column_names: Vec<String> =
                     schema.columns.iter().map(|c| c.name.clone()).collect();
@@ -652,13 +676,7 @@ impl Executor {
     }
 
     fn format_value(value: &Value) -> String {
-        match value {
-            Value::Integer(i) => i.to_string(),
-            Value::Float(f) => f.to_string(),
-            Value::Text(t) => t.clone(),
-            Value::Boolean(b) => b.to_string(),
-            Value::Null => "NULL".to_string(),
-        }
+        value.to_string()
     }
 
     fn build_cache_key(

@@ -73,8 +73,6 @@ def test_explain_feature():
     rl_result = agent.explain_action(30, False, 5)
     print(f"RL agent explain: State {rl_result['state']}, Action {rl_result['best_action']}")
     
-    return True
-
 if __name__ == "__main__":
     try:
         test_explain_feature()

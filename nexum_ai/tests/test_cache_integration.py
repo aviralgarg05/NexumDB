@@ -99,7 +99,6 @@ def test_cache_persistence_lifecycle():
         print("   Cache cleared successfully")
         
         print("\nAll tests passed!")
-        return True
 
 
 def test_environment_variable_config():
@@ -132,7 +131,6 @@ def test_environment_variable_config():
             if 'NEXUMDB_CACHE_FILE' in os.environ:
                 del os.environ['NEXUMDB_CACHE_FILE']
         
-        return True
 
 
 def test_error_handling():
@@ -168,7 +166,6 @@ def test_error_handling():
         
         cache.clear()
         
-        return True
 
 
 def main():
@@ -189,12 +186,9 @@ def main():
     for test_name, test_func in tests:
         try:
             print(f"\nRunning: {test_name}")
-            if test_func():
-                passed += 1
-                print(f"PASSED: {test_name}")
-            else:
-                failed += 1
-                print(f"FAILED: {test_name}")
+            test_func()
+            passed += 1
+            print(f"PASSED: {test_name}")
         except Exception as e:
             failed += 1
             print(f"FAILED: {test_name} - {e}")
