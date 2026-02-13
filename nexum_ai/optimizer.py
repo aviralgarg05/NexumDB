@@ -61,6 +61,8 @@ class SemanticCache:
         self.cache: List[Dict] = []
         self.similarity_threshold = similarity_threshold
         self.model = None
+        self.hf_model = None
+        self.hf_tokenizer = None
         
         # Support environment variable for cache file path
         cache_file_env = os.environ.get('NEXUMDB_CACHE_FILE', cache_file)
@@ -75,22 +77,79 @@ class SemanticCache:
         
     def initialize_model(self) -> None:
         """Initialize local embedding model - deferred to avoid import errors"""
+        model_name = os.environ.get('NEXUM_EMBEDDING_MODEL', 'all-MiniLM-L6-v2')
+        
+        # Try SentenceTransformer first (preferred for embedding models)
         try:
             from sentence_transformers import SentenceTransformer
-            self.model = SentenceTransformer('all-MiniLM-L6-v2')
-            logger.info("Semantic cache initialized with all-MiniLM-L6-v2")
+            self.model = SentenceTransformer(model_name)
+            print(f"Semantic cache initialized with SentenceTransformer: {model_name}")
+            self.hf_model = None
+            self.hf_tokenizer = None
+            return
         except ImportError:
-            logger.warning("sentence-transformers not installed, using fallback")
+            print("Warning: sentence-transformers not installed, trying transformers fallback")
+        except Exception as e:
+            print(f"Warning: Failed to load with SentenceTransformer ({e}), trying transformers fallback")
+            
+        # Fallback to generic HuggingFace transformers
+        try:
+            from transformers import AutoTokenizer, AutoModel
+            import torch
+            
+            # If default model was used but ST failed, we might want a different default for raw transformers
+            # but usually the same model name works for both if it's on HF Hub.
+            # However, 'all-MiniLM-L6-v2' is a sentence-transformers specific alias often mapped to 
+            # 'sentence-transformers/all-MiniLM-L6-v2' on HF Hub.
+            if model_name == 'all-MiniLM-L6-v2':
+                model_name = 'sentence-transformers/all-MiniLM-L6-v2'
+                
+            self.hf_tokenizer = AutoTokenizer.from_pretrained(model_name)
+            self.hf_model = AutoModel.from_pretrained(model_name)
             self.model = None
+            print(f"Semantic cache initialized with HuggingFace transformers: {model_name}")
+        except ImportError:
+             print("Warning: transformers not installed, using simple fallback")
+             self.model = None
+             self.hf_model = None
+             self.hf_tokenizer = None
+        except Exception as e:
+            print(f"Warning: Failed to load with transformers ({e}), using simple fallback")
+            self.model = None
+            self.hf_model = None
+            self.hf_tokenizer = None
     
     def vectorize(self, text: str) -> List[float]:
         """Convert text to embedding vector"""
-        if self.model is None:
+        if self.model is None and self.hf_model is None:
             self.initialize_model()
         
         if self.model is not None:
             embedding = self.model.encode(text)
             return embedding.tolist()
+        elif self.hf_model is not None and self.hf_tokenizer is not None:
+            try:
+                import torch
+                # Tokenize and compute embedding
+                inputs = self.hf_tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=512)
+                with torch.no_grad():
+                    outputs = self.hf_model(**inputs)
+                
+                # Mean pooling
+                # attention_mask shape: (batch, seq_len)
+                # last_hidden_state shape: (batch, seq_len, hidden_dim)
+                attention_mask = inputs['attention_mask']
+                token_embeddings = outputs.last_hidden_state
+                
+                input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+                sum_embeddings = torch.sum(token_embeddings * input_mask_expanded, 1)
+                sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+                
+                embedding = sum_embeddings / sum_mask
+                return embedding[0].tolist()
+            except Exception as e:
+                print(f"Error during HF vectorization: {e}, using fallback")
+                return self._fallback_vectorize(text)
         else:
             return self._fallback_vectorize(text)
     
