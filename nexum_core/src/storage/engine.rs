@@ -12,9 +12,13 @@ impl StorageEngine {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
         let db_path = path.as_ref().to_path_buf();
         let db = sled::open(&db_path).map_err(|e| StorageError::OpenError(e.to_string()))?;
+        let wal_path = db_path
+            .parent()
+            .map(|parent| parent.join("nexum_tx_wal.json"))
+            .unwrap_or_else(|| db_path.with_file_name("nexum_tx_wal.json"));
         Ok(Self {
             db,
-            wal_path: Some(db_path.join("nexum_tx_wal.json")),
+            wal_path: Some(wal_path),
         })
     }
 
@@ -161,5 +165,43 @@ mod tests {
         assert_eq!(engine.get(b"batch:1").unwrap().unwrap(), b"value1");
         assert_eq!(engine.get(b"batch:2").unwrap().unwrap(), b"value2");
         assert_eq!(engine.get(b"batch:3").unwrap().unwrap(), b"value3");
+    }
+
+    #[test]
+    fn test_scan_all() {
+        let engine = StorageEngine::memory().unwrap();
+
+        engine.set(b"k1", b"v1").unwrap();
+        engine.set(b"k2", b"v2").unwrap();
+
+        let all = engine.scan_all().unwrap();
+        assert_eq!(all.len(), 2);
+    }
+
+    #[test]
+    fn test_delete_keys() {
+        let engine = StorageEngine::memory().unwrap();
+
+        engine.set(b"a", b"1").unwrap();
+        engine.set(b"b", b"2").unwrap();
+        engine.set(b"c", b"3").unwrap();
+
+        let keys = vec![b"a".to_vec(), b"c".to_vec()];
+        engine.delete_keys(&keys).unwrap();
+
+        assert!(engine.get(b"a").unwrap().is_none());
+        assert!(engine.get(b"c").unwrap().is_none());
+        assert_eq!(engine.get(b"b").unwrap().unwrap(), b"2");
+    }
+
+    #[test]
+    fn test_wal_path_is_outside_db_directory() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("db_dir");
+        let engine = StorageEngine::new(&db_path).unwrap();
+
+        let wal_path = engine.wal_path().unwrap();
+        assert_eq!(wal_path.parent(), db_path.parent());
+        assert_ne!(wal_path.parent(), Some(db_path.as_path()));
     }
 }

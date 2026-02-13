@@ -5,6 +5,13 @@ All notable changes to NexumDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Notes
+
+* Transaction WAL currently uses a full `scan_all()` snapshot on `BEGIN` as an MVP implementation. A follow-up is planned to replace this with an incremental per-mutation undo/redo log for better scalability.
+* Transaction isolation is currently a single-active-transaction model per `Executor` and does not implement MVCC across multiple sessions yet.
+
 ## [0.6.0](https://github.com/aviralgarg05/NexumDB/compare/v0.5.0...v0.6.0) (2026-02-06)
 
 

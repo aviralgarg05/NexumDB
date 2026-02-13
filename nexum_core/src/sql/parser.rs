@@ -229,7 +229,21 @@ impl Parser {
             return Ok(Some(Statement::CommitTransaction));
         }
 
+        if tokens.len() == 2
+            && tokens[0].eq_ignore_ascii_case("commit")
+            && tokens[1].eq_ignore_ascii_case("transaction")
+        {
+            return Ok(Some(Statement::CommitTransaction));
+        }
+
         if tokens.len() == 1 && tokens[0].eq_ignore_ascii_case("rollback") {
+            return Ok(Some(Statement::RollbackTransaction));
+        }
+
+        if tokens.len() == 2
+            && tokens[0].eq_ignore_ascii_case("rollback")
+            && tokens[1].eq_ignore_ascii_case("transaction")
+        {
             return Ok(Some(Statement::RollbackTransaction));
         }
 
@@ -534,11 +548,17 @@ mod tests {
     fn test_parse_commit_transaction() {
         let stmt = Parser::parse("COMMIT").unwrap();
         assert!(matches!(stmt, Statement::CommitTransaction));
+
+        let stmt = Parser::parse("COMMIT TRANSACTION").unwrap();
+        assert!(matches!(stmt, Statement::CommitTransaction));
     }
 
     #[test]
     fn test_parse_rollback_transaction() {
         let stmt = Parser::parse("ROLLBACK").unwrap();
+        assert!(matches!(stmt, Statement::RollbackTransaction));
+
+        let stmt = Parser::parse("ROLLBACK TRANSACTION").unwrap();
         assert!(matches!(stmt, Statement::RollbackTransaction));
     }
 

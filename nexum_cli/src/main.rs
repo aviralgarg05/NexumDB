@@ -378,7 +378,7 @@ fn print_result_json(result: &ExecutionResult) {
                 "type": "transaction_committed",
                 "transaction_id": tx_id,
                 "writes": writes,
-                "message": format!("Transaction {} committed ({} write statement(s))", tx_id, writes)
+                "message": format!("Transaction {} committed ({} row mutation(s))", tx_id, writes)
             })
         }
         ExecutionResult::TransactionRolledBack { tx_id } => {
@@ -482,7 +482,7 @@ fn print_result_formatted(result: &ExecutionResult) {
         }
         ExecutionResult::TransactionCommitted { tx_id, writes } => {
             print_success(&format!(
-                "Transaction {} committed ({} write statement(s))",
+                "Transaction {} committed ({} row mutation(s))",
                 tx_id, writes
             ));
         }
