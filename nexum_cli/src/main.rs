@@ -40,6 +40,7 @@ SQL COMMANDS:
 SPECIAL COMMANDS:
   SHOW TABLES            List all tables
   DESCRIBE <table>       Show table schema
+  BEGIN / COMMIT / ROLLBACK  Transaction control
   ASK <question>         Natural language query
   EXPLAIN <query>        Show query execution plan
 "#)]
@@ -246,6 +247,11 @@ fn print_help_summary() {
         "DESCRIBE <table>".yellow()
     );
     println!(
+        "  {} {} - Transaction control",
+        "•".cyan(),
+        "BEGIN / COMMIT / ROLLBACK".yellow()
+    );
+    println!(
         "  {} {} - Show query plan",
         "•".cyan(),
         "EXPLAIN <query>".yellow()
@@ -290,6 +296,9 @@ fn print_full_help() {
     println!("{}", "Special Commands:".yellow().bold());
     println!("  {} - List all tables", "SHOW TABLES".cyan());
     println!("  {} - Show table schema", "DESCRIBE <table>".cyan());
+    println!("  {} - Start transaction", "BEGIN".cyan());
+    println!("  {} - Commit transaction", "COMMIT".cyan());
+    println!("  {} - Roll back transaction", "ROLLBACK".cyan());
     println!("  {} - Natural language query", "ASK <question>".cyan());
     println!("  {} - Query execution plan", "EXPLAIN <query>".cyan());
     println!();
@@ -357,6 +366,28 @@ fn print_result(result: &ExecutionResult, json_output: bool) {
 
 fn print_result_json(result: &ExecutionResult) {
     let json = match result {
+        ExecutionResult::TransactionBegan { tx_id } => {
+            serde_json::json!({
+                "type": "transaction_began",
+                "transaction_id": tx_id,
+                "message": format!("Transaction {} started", tx_id)
+            })
+        }
+        ExecutionResult::TransactionCommitted { tx_id, writes } => {
+            serde_json::json!({
+                "type": "transaction_committed",
+                "transaction_id": tx_id,
+                "writes": writes,
+                "message": format!("Transaction {} committed ({} write statement(s))", tx_id, writes)
+            })
+        }
+        ExecutionResult::TransactionRolledBack { tx_id } => {
+            serde_json::json!({
+                "type": "transaction_rolled_back",
+                "transaction_id": tx_id,
+                "message": format!("Transaction {} rolled back", tx_id)
+            })
+        }
         ExecutionResult::Created { table } => {
             serde_json::json!({
                 "type": "created",
@@ -446,6 +477,18 @@ fn print_result_json(result: &ExecutionResult) {
 
 fn print_result_formatted(result: &ExecutionResult) {
     match result {
+        ExecutionResult::TransactionBegan { tx_id } => {
+            print_success(&format!("Transaction {} started", tx_id));
+        }
+        ExecutionResult::TransactionCommitted { tx_id, writes } => {
+            print_success(&format!(
+                "Transaction {} committed ({} write statement(s))",
+                tx_id, writes
+            ));
+        }
+        ExecutionResult::TransactionRolledBack { tx_id } => {
+            print_success(&format!("Transaction {} rolled back", tx_id));
+        }
         ExecutionResult::Created { table } => {
             print_success(&format!("Table '{}' created successfully", table));
         }

@@ -1,16 +1,21 @@
 use super::{Result, StorageError};
 use sled::Db;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone)]
 pub struct StorageEngine {
     db: Db,
+    wal_path: Option<PathBuf>,
 }
 
 impl StorageEngine {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let db = sled::open(path).map_err(|e| StorageError::OpenError(e.to_string()))?;
-        Ok(Self { db })
+        let db_path = path.as_ref().to_path_buf();
+        let db = sled::open(&db_path).map_err(|e| StorageError::OpenError(e.to_string()))?;
+        Ok(Self {
+            db,
+            wal_path: Some(db_path.join("nexum_tx_wal.json")),
+        })
     }
 
     pub fn memory() -> Result<Self> {
@@ -18,7 +23,7 @@ impl StorageEngine {
         let db = config
             .open()
             .map_err(|e| StorageError::OpenError(e.to_string()))?;
-        Ok(Self { db })
+        Ok(Self { db, wal_path: None })
     }
 
     pub fn set(&self, key: &[u8], value: &[u8]) -> Result<()> {
@@ -58,9 +63,32 @@ impl StorageEngine {
         Ok(results)
     }
 
+    pub fn scan_all(&self) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
+        let mut results = Vec::new();
+        for item in self.db.iter() {
+            let (k, v) = item?;
+            results.push((k.to_vec(), v.to_vec()));
+        }
+        Ok(results)
+    }
+
+    pub fn delete_keys(&self, keys: &[Vec<u8>]) -> Result<()> {
+        let mut batch = sled::Batch::default();
+        for key in keys {
+            batch.remove(key.as_slice());
+        }
+        self.db.apply_batch(batch)?;
+        self.db.flush()?;
+        Ok(())
+    }
+
     pub fn flush(&self) -> Result<()> {
         self.db.flush()?;
         Ok(())
+    }
+
+    pub fn wal_path(&self) -> Option<&Path> {
+        self.wal_path.as_deref()
     }
 }
 

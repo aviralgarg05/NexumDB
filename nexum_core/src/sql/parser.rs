@@ -214,6 +214,25 @@ impl Parser {
             return Ok(Some(Statement::ShowTables));
         }
 
+        if tokens.len() == 1 && tokens[0].eq_ignore_ascii_case("begin") {
+            return Ok(Some(Statement::BeginTransaction));
+        }
+
+        if tokens.len() == 2
+            && tokens[0].eq_ignore_ascii_case("begin")
+            && tokens[1].eq_ignore_ascii_case("transaction")
+        {
+            return Ok(Some(Statement::BeginTransaction));
+        }
+
+        if tokens.len() == 1 && tokens[0].eq_ignore_ascii_case("commit") {
+            return Ok(Some(Statement::CommitTransaction));
+        }
+
+        if tokens.len() == 1 && tokens[0].eq_ignore_ascii_case("rollback") {
+            return Ok(Some(Statement::RollbackTransaction));
+        }
+
         if tokens.len() == 2 && tokens[0].eq_ignore_ascii_case("describe") {
             let table = Self::clean_identifier(tokens[1]);
             return Ok(Some(Statement::DescribeTable { name: table }));
@@ -500,6 +519,27 @@ mod tests {
             Statement::ShowTables => {}
             _ => panic!("Expected ShowTables statement"),
         }
+    }
+
+    #[test]
+    fn test_parse_begin_transaction() {
+        let stmt = Parser::parse("BEGIN").unwrap();
+        assert!(matches!(stmt, Statement::BeginTransaction));
+
+        let stmt = Parser::parse("BEGIN TRANSACTION").unwrap();
+        assert!(matches!(stmt, Statement::BeginTransaction));
+    }
+
+    #[test]
+    fn test_parse_commit_transaction() {
+        let stmt = Parser::parse("COMMIT").unwrap();
+        assert!(matches!(stmt, Statement::CommitTransaction));
+    }
+
+    #[test]
+    fn test_parse_rollback_transaction() {
+        let stmt = Parser::parse("ROLLBACK").unwrap();
+        assert!(matches!(stmt, Statement::RollbackTransaction));
     }
 
     #[test]

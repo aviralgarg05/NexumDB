@@ -143,3 +143,46 @@ fn test_table_lifecycle_and_projection() {
         _ => panic!("Expected TableList result"),
     }
 }
+
+#[test]
+fn test_transaction_commands_flow() {
+    let storage = StorageEngine::memory().unwrap();
+    let executor = Executor::new(storage);
+
+    let create = Parser::parse("CREATE TABLE ledger (id INTEGER, amount INTEGER)").unwrap();
+    executor.execute(create).unwrap();
+
+    let begin = Parser::parse("BEGIN").unwrap();
+    executor.execute(begin).unwrap();
+
+    let insert = Parser::parse("INSERT INTO ledger VALUES (1, 100)").unwrap();
+    executor.execute(insert).unwrap();
+
+    let rollback = Parser::parse("ROLLBACK").unwrap();
+    executor.execute(rollback).unwrap();
+
+    let select = Parser::parse("SELECT * FROM ledger").unwrap();
+    let result = executor.execute(select).unwrap();
+    match result {
+        nexum_core::executor::ExecutionResult::Selected { rows, .. } => {
+            assert_eq!(rows.len(), 0);
+        }
+        _ => panic!("Expected Selected result"),
+    }
+
+    let begin = Parser::parse("BEGIN TRANSACTION").unwrap();
+    executor.execute(begin).unwrap();
+    let insert = Parser::parse("INSERT INTO ledger VALUES (2, 250)").unwrap();
+    executor.execute(insert).unwrap();
+    let commit = Parser::parse("COMMIT").unwrap();
+    executor.execute(commit).unwrap();
+
+    let select = Parser::parse("SELECT * FROM ledger").unwrap();
+    let result = executor.execute(select).unwrap();
+    match result {
+        nexum_core::executor::ExecutionResult::Selected { rows, .. } => {
+            assert_eq!(rows.len(), 1);
+        }
+        _ => panic!("Expected Selected result"),
+    }
+}
