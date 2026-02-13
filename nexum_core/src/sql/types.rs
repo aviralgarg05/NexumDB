@@ -69,6 +69,9 @@ pub struct OrderByClause {
 
 #[derive(Debug, Clone)]
 pub enum Statement {
+    BeginTransaction,
+    CommitTransaction,
+    RollbackTransaction,
     CreateTable {
         name: String,
         columns: Vec<Column>,

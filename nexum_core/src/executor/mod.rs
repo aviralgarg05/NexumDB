@@ -3,7 +3,13 @@ use crate::catalog::Catalog;
 use crate::sql::types::{Column, DataType, SelectItem, Statement, Value};
 use crate::storage::{find_similar_keys, Result, StorageEngine, StorageError};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs::{self, File};
+use std::io::Write;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, MutexGuard};
 use std::time::Instant;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub mod filter;
 use filter::ExpressionEvaluator;
@@ -13,20 +19,51 @@ pub struct Row {
     pub values: Vec<Value>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TxWalFile {
+    tx_id: u64,
+    #[serde(default)]
+    committed: bool,
+    #[serde(default)]
+    snapshot: Option<Vec<(Vec<u8>, Vec<u8>)>>,
+}
+
+#[derive(Debug, Clone)]
+struct TransactionState {
+    tx_id: u64,
+    snapshot: Vec<(Vec<u8>, Vec<u8>)>,
+    write_count: usize,
+}
+
 pub struct Executor {
     storage: StorageEngine,
     catalog: Catalog,
     cache: Option<SemanticCache>,
+    tx_state: Mutex<Option<TransactionState>>,
+    tx_counter: AtomicU64,
 }
 
 impl Executor {
     pub fn new(storage: StorageEngine) -> Self {
         let catalog = Catalog::new(storage.clone());
-        Self {
+        let executor = Self {
             storage,
             catalog,
             cache: None,
+            tx_state: Mutex::new(None),
+            tx_counter: AtomicU64::new(
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(1),
+            ),
+        };
+
+        if let Err(e) = executor.recover_pending_transaction() {
+            log::warn!("Transaction recovery failed: {}", e);
         }
+
+        executor
     }
 
     pub fn with_cache(self) -> Self {
@@ -51,9 +88,13 @@ impl Executor {
         let start = Instant::now();
 
         let result = match statement {
+            Statement::BeginTransaction => self.begin_transaction(),
+            Statement::CommitTransaction => self.commit_transaction(),
+            Statement::RollbackTransaction => self.rollback_transaction(),
             Statement::CreateTable { name, columns } => {
                 self.catalog.create_table(&name, columns)?;
                 self.invalidate_cache()?;
+                self.record_transaction_write(0)?;
                 Ok(ExecutionResult::Created { table: name })
             }
             Statement::Insert {
@@ -78,6 +119,7 @@ impl Executor {
                 }
 
                 self.invalidate_cache()?;
+                self.record_transaction_write(values.len())?;
 
                 Ok(ExecutionResult::Inserted {
                     table,
@@ -251,6 +293,7 @@ impl Executor {
 
                 self.catalog.drop_table(&name)?;
                 self.invalidate_cache()?;
+                self.record_transaction_write(deleted_count)?;
 
                 Ok(ExecutionResult::Deleted {
                     table: name,
@@ -308,6 +351,7 @@ impl Executor {
                     }
 
                     self.invalidate_cache()?;
+                    self.record_transaction_write(deleted_count)?;
                     Ok(ExecutionResult::Deleted {
                         table,
                         rows: deleted_count,
@@ -325,6 +369,7 @@ impl Executor {
                     }
 
                     self.invalidate_cache()?;
+                    self.record_transaction_write(deleted_count)?;
                     Ok(ExecutionResult::Deleted {
                         table,
                         rows: deleted_count,
@@ -448,6 +493,7 @@ impl Executor {
                 }
 
                 self.invalidate_cache()?;
+                self.record_transaction_write(updated_count)?;
                 Ok(ExecutionResult::Updated {
                     table,
                     rows: updated_count,
@@ -459,6 +505,193 @@ impl Executor {
         log::debug!("Query executed in {:?}", duration);
 
         result
+    }
+
+    fn lock_tx_state(&self) -> Result<MutexGuard<'_, Option<TransactionState>>> {
+        self.tx_state
+            .lock()
+            .map_err(|_| StorageError::ReadError("Transaction state lock poisoned".to_string()))
+    }
+
+    fn begin_transaction(&self) -> Result<ExecutionResult> {
+        if self.lock_tx_state()?.is_some() {
+            return Err(StorageError::WriteError(
+                "A transaction is already active. Commit or rollback before BEGIN.".to_string(),
+            ));
+        }
+
+        // NOTE: Current isolation is a single-active-transaction model per Executor.
+        // Writes still apply directly to storage and are not MVCC-isolated across sessions.
+        // TODO(issue#22-followup): This MVP WAL takes a full database snapshot via scan_all().
+        // Replace with an incremental undo/redo mutation log for large datasets.
+        let snapshot = self.storage.scan_all()?;
+        let tx_id = self.tx_counter.fetch_add(1, Ordering::Relaxed);
+
+        self.write_transaction_wal(&TxWalFile {
+            tx_id,
+            committed: false,
+            snapshot: Some(snapshot.clone()),
+        })?;
+
+        *self.lock_tx_state()? = Some(TransactionState {
+            tx_id,
+            snapshot,
+            write_count: 0,
+        });
+
+        Ok(ExecutionResult::TransactionBegan { tx_id })
+    }
+
+    fn commit_transaction(&self) -> Result<ExecutionResult> {
+        let (tx_id, writes) = {
+            let state_ref = self.lock_tx_state()?;
+            let state = state_ref.as_ref().ok_or_else(|| {
+                StorageError::ReadError("No active transaction. Use BEGIN first.".to_string())
+            })?;
+            (state.tx_id, state.write_count)
+        };
+
+        self.write_transaction_wal(&TxWalFile {
+            tx_id,
+            committed: true,
+            snapshot: None,
+        })?;
+        self.clear_transaction_wal()?;
+        *self.lock_tx_state()? = None;
+
+        Ok(ExecutionResult::TransactionCommitted { tx_id, writes })
+    }
+
+    fn rollback_transaction(&self) -> Result<ExecutionResult> {
+        let (tx_id, snapshot) = {
+            let state_ref = self.lock_tx_state()?;
+            let state = state_ref.as_ref().ok_or_else(|| {
+                StorageError::ReadError("No active transaction. Use BEGIN first.".to_string())
+            })?;
+            (state.tx_id, state.snapshot.clone())
+        };
+
+        self.restore_snapshot(&snapshot)?;
+        self.clear_transaction_wal()?;
+        self.invalidate_cache()?;
+        *self.lock_tx_state()? = None;
+
+        Ok(ExecutionResult::TransactionRolledBack { tx_id })
+    }
+
+    fn record_transaction_write(&self, rows: usize) -> Result<()> {
+        if rows == 0 {
+            return Ok(());
+        }
+
+        if let Some(active) = self.lock_tx_state()?.as_mut() {
+            active.write_count += rows;
+        }
+        Ok(())
+    }
+
+    fn recover_pending_transaction(&self) -> Result<()> {
+        let Some(wal) = self.read_transaction_wal()? else {
+            return Ok(());
+        };
+
+        if wal.committed {
+            self.clear_transaction_wal()?;
+            return Ok(());
+        }
+
+        let snapshot = wal.snapshot.ok_or_else(|| {
+            StorageError::ReadError("WAL recovery failed: missing snapshot for transaction".into())
+        })?;
+
+        self.restore_snapshot(&snapshot)?;
+        self.clear_transaction_wal()?;
+        self.invalidate_cache()?;
+        log::warn!(
+            "Recovered and rolled back uncommitted transaction {} from WAL",
+            wal.tx_id
+        );
+        Ok(())
+    }
+
+    fn read_transaction_wal(&self) -> Result<Option<TxWalFile>> {
+        let Some(path) = self.storage.wal_path() else {
+            return Ok(None);
+        };
+
+        if !path.exists() {
+            return Ok(None);
+        }
+
+        let bytes = fs::read(path).map_err(|e| StorageError::ReadError(e.to_string()))?;
+        let wal: TxWalFile =
+            serde_json::from_slice(&bytes).map_err(|e| StorageError::ReadError(e.to_string()))?;
+        Ok(Some(wal))
+    }
+
+    fn write_transaction_wal(&self, wal: &TxWalFile) -> Result<()> {
+        let Some(path) = self.storage.wal_path() else {
+            return Ok(());
+        };
+
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| StorageError::WriteError(e.to_string()))?;
+        }
+
+        let data = serde_json::to_vec(wal).map_err(|e| StorageError::WriteError(e.to_string()))?;
+        let mut file = File::create(path).map_err(|e| StorageError::WriteError(e.to_string()))?;
+        file.write_all(&data)
+            .map_err(|e| StorageError::WriteError(e.to_string()))?;
+        file.sync_all()
+            .map_err(|e| StorageError::WriteError(e.to_string()))?;
+        Ok(())
+    }
+
+    fn clear_transaction_wal(&self) -> Result<()> {
+        let Some(path) = self.storage.wal_path() else {
+            return Ok(());
+        };
+
+        match fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(StorageError::WriteError(e.to_string())),
+        }
+    }
+
+    fn restore_snapshot(&self, snapshot: &[(Vec<u8>, Vec<u8>)]) -> Result<()> {
+        let current = self.storage.scan_all()?;
+        let current_map: HashMap<Vec<u8>, Vec<u8>> = current.into_iter().collect();
+        let snapshot_map: HashMap<Vec<u8>, Vec<u8>> = snapshot
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+
+        let keys_to_delete: Vec<Vec<u8>> = current_map
+            .keys()
+            .filter(|key| !snapshot_map.contains_key(*key))
+            .cloned()
+            .collect();
+
+        let entries_to_set: Vec<(Vec<u8>, Vec<u8>)> = snapshot_map
+            .iter()
+            .filter(|(key, value)| match current_map.get(*key) {
+                Some(current_value) => current_value != *value,
+                None => true,
+            })
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
+
+        if !keys_to_delete.is_empty() {
+            self.storage.delete_keys(&keys_to_delete)?;
+        }
+
+        if !entries_to_set.is_empty() {
+            self.storage.batch_set(entries_to_set)?;
+        }
+
+        self.storage.flush()?;
+        Ok(())
     }
 
     fn invalidate_cache(&self) -> Result<()> {
@@ -779,6 +1012,16 @@ impl Executor {
 
 #[derive(Debug)]
 pub enum ExecutionResult {
+    TransactionBegan {
+        tx_id: u64,
+    },
+    TransactionCommitted {
+        tx_id: u64,
+        writes: usize,
+    },
+    TransactionRolledBack {
+        tx_id: u64,
+    },
     Created {
         table: String,
     },
@@ -1530,6 +1773,159 @@ mod tests {
                 assert!(tables.is_empty());
             }
             _ => panic!("Expected TableList result"),
+        }
+    }
+
+    #[test]
+    fn test_transaction_rollback_restores_previous_state() {
+        let storage = StorageEngine::memory().unwrap();
+        let executor = Executor::new(storage);
+
+        executor
+            .execute(Statement::CreateTable {
+                name: "tx_users".to_string(),
+                columns: vec![
+                    Column {
+                        name: "id".to_string(),
+                        data_type: DataType::Integer,
+                    },
+                    Column {
+                        name: "name".to_string(),
+                        data_type: DataType::Text,
+                    },
+                ],
+            })
+            .unwrap();
+
+        executor.execute(Statement::BeginTransaction).unwrap();
+        executor
+            .execute(Statement::Insert {
+                table: "tx_users".to_string(),
+                columns: vec!["id".to_string(), "name".to_string()],
+                values: vec![vec![Value::Integer(1), Value::Text("Alice".to_string())]],
+            })
+            .unwrap();
+
+        executor.execute(Statement::RollbackTransaction).unwrap();
+
+        let result = executor
+            .execute(Statement::Select {
+                table: "tx_users".to_string(),
+                projection: vec![SelectItem::Wildcard],
+                where_clause: None,
+                order_by: None,
+                limit: None,
+            })
+            .unwrap();
+
+        match result {
+            ExecutionResult::Selected { rows, .. } => assert!(rows.is_empty()),
+            _ => panic!("Expected Selected result"),
+        }
+    }
+
+    #[test]
+    fn test_transaction_commit_persists_state() {
+        let storage = StorageEngine::memory().unwrap();
+        let executor = Executor::new(storage);
+
+        executor
+            .execute(Statement::CreateTable {
+                name: "tx_products".to_string(),
+                columns: vec![Column {
+                    name: "id".to_string(),
+                    data_type: DataType::Integer,
+                }],
+            })
+            .unwrap();
+
+        let begin = executor.execute(Statement::BeginTransaction).unwrap();
+        match begin {
+            ExecutionResult::TransactionBegan { .. } => {}
+            _ => panic!("Expected TransactionBegan"),
+        }
+
+        executor
+            .execute(Statement::Insert {
+                table: "tx_products".to_string(),
+                columns: vec!["id".to_string()],
+                values: vec![vec![Value::Integer(1)]],
+            })
+            .unwrap();
+
+        let commit = executor.execute(Statement::CommitTransaction).unwrap();
+        match commit {
+            ExecutionResult::TransactionCommitted { writes, .. } => assert_eq!(writes, 1),
+            _ => panic!("Expected TransactionCommitted"),
+        }
+
+        let result = executor
+            .execute(Statement::Select {
+                table: "tx_products".to_string(),
+                projection: vec![SelectItem::Wildcard],
+                where_clause: None,
+                order_by: None,
+                limit: None,
+            })
+            .unwrap();
+        match result {
+            ExecutionResult::Selected { rows, .. } => assert_eq!(rows.len(), 1),
+            _ => panic!("Expected Selected result"),
+        }
+    }
+
+    #[test]
+    fn test_transaction_recovery_from_wal() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("tx_recovery_db");
+
+        {
+            let storage = StorageEngine::new(&db_path).unwrap();
+            let executor = Executor::new(storage);
+            executor
+                .execute(Statement::CreateTable {
+                    name: "accounts".to_string(),
+                    columns: vec![
+                        Column {
+                            name: "id".to_string(),
+                            data_type: DataType::Integer,
+                        },
+                        Column {
+                            name: "balance".to_string(),
+                            data_type: DataType::Integer,
+                        },
+                    ],
+                })
+                .unwrap();
+
+            executor.execute(Statement::BeginTransaction).unwrap();
+            executor
+                .execute(Statement::Insert {
+                    table: "accounts".to_string(),
+                    columns: vec!["id".to_string(), "balance".to_string()],
+                    values: vec![vec![Value::Integer(1), Value::Integer(500)]],
+                })
+                .unwrap();
+            // Simulate crash by dropping without commit/rollback.
+        }
+
+        {
+            let storage = StorageEngine::new(&db_path).unwrap();
+            let executor = Executor::new(storage);
+            let result = executor
+                .execute(Statement::Select {
+                    table: "accounts".to_string(),
+                    projection: vec![SelectItem::Wildcard],
+                    where_clause: None,
+                    order_by: None,
+                    limit: None,
+                })
+                .unwrap();
+
+            match result {
+                ExecutionResult::Selected { rows, .. } => assert_eq!(rows.len(), 0),
+                _ => panic!("Expected Selected result"),
+            }
         }
     }
 }
