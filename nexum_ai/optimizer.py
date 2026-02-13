@@ -7,6 +7,8 @@ from typing import Optional, List, Dict, Any
 import json
 import os
 from pathlib import Path
+import threading
+
 
 logger = logging.getLogger(__name__)
 
@@ -56,43 +58,98 @@ class SemanticCache:
     Uses local embedding models only
     Supports persistence to disk via JSON or pickle files
     """
-    
+
+
     def __init__(self, similarity_threshold: float = 0.95, cache_file: str = "semantic_cache.pkl") -> None:
         self.cache: List[Dict] = []
         self.similarity_threshold = similarity_threshold
         self.model = None
-        
+
+        # Async model loading state
+        self._model_lock = threading.Lock()
+        self._model_loading = False
+        self._model_load_error: Optional[Exception] = None
+        self._model_thread: Optional[threading.Thread] = None
+
         # Support environment variable for cache file path
-        cache_file_env = os.environ.get('NEXUMDB_CACHE_FILE', cache_file)
+        cache_file_env = os.environ.get("NEXUMDB_CACHE_FILE", cache_file)
         self.cache_file = cache_file_env
-        
+
         self.cache_dir = Path("cache")
         self.cache_dir.mkdir(exist_ok=True)
         self.cache_path = self.cache_dir / self.cache_file
-        
+
         # Load existing cache on initialization
         self.load_cache()
-        
+
     def initialize_model(self) -> None:
-        """Initialize local embedding model - deferred to avoid import errors"""
-        try:
-            from sentence_transformers import SentenceTransformer
-            self.model = SentenceTransformer('all-MiniLM-L6-v2')
-            logger.info("Semantic cache initialized with all-MiniLM-L6-v2")
-        except ImportError:
-            logger.warning("sentence-transformers not installed, using fallback")
-            self.model = None
-    
+        """
+        Start loading the SentenceTransformer model in a background thread.
+
+        This function is intentionally non-blocking. If the model is already
+        loaded or currently loading, it returns immediately.
+        """
+        with self._model_lock:
+            # Already loaded
+            if self.model is not None:
+                return
+
+            # Already loading
+            if self._model_loading:
+                return
+
+            self._model_loading = True
+            self._model_load_error = None
+
+            def _load() -> None:
+                try:
+                    from sentence_transformers import SentenceTransformer
+                    model = SentenceTransformer("all-MiniLM-L6-v2")
+
+                    with self._model_lock:
+                        self.model = model
+                        self._model_loading = False
+
+                    logger.info("Semantic cache initialized with all-MiniLM-L6-v2 (async)")
+
+                except ImportError as e:
+                    with self._model_lock:
+                        self.model = None
+                        self._model_loading = False
+                        self._model_load_error = e
+                    logger.warning("sentence-transformers not installed, using fallback")
+
+                except Exception as e:
+                    with self._model_lock:
+                        self.model = None
+                        self._model_loading = False
+                        self._model_load_error = e
+                    logger.exception("Failed to initialize sentence-transformers model, using fallback")
+
+            self._model_thread = threading.Thread(
+                target=_load,
+                name="nexumdb-model-loader",
+                daemon=True,
+            )
+            self._model_thread.start()
+
     def vectorize(self, text: str) -> List[float]:
-        """Convert text to embedding vector"""
+        """Convert text to embedding vector (non-blocking)."""
+
+        # Kick off async loading if needed
         if self.model is None:
             self.initialize_model()
-        
+
+        # If model is ready, use it
         if self.model is not None:
             embedding = self.model.encode(text)
             return embedding.tolist()
-        else:
-            return self._fallback_vectorize(text)
+
+        # If model is still loading or failed, fallback
+        return self._fallback_vectorize(text)
+
+
+
     
     def _fallback_vectorize(self, text: str) -> List[float]:
         """Simple fallback vectorization using character hashing"""
