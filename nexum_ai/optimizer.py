@@ -3,6 +3,7 @@ Semantic cache and query optimizer using local embedding models
 """
 import logging
 import numpy as np
+import time
 from typing import Optional, List, Dict, Any
 import json
 import os
@@ -61,6 +62,7 @@ class SemanticCache:
         self.cache: List[Dict] = []
         self.similarity_threshold = similarity_threshold
         self.model = None
+        self.max_age_seconds: Optional[float] = None  # None = no TTL
         
         # Support environment variable for cache file path
         cache_file_env = os.environ.get('NEXUMDB_CACHE_FILE', cache_file)
@@ -115,11 +117,50 @@ class SemanticCache:
         
         return float(dot_product / (norm1 * norm2))
     
+    def _is_entry_expired(self, entry: Dict) -> bool:
+        """Check if a cache entry has exceeded its TTL.
+        
+        Args:
+            entry: Cache entry dict, expected to contain a 'timestamp' key.
+        
+        Returns:
+            True if the entry is expired, False otherwise.
+            Entries without a timestamp are never considered expired.
+        """
+        if self.max_age_seconds is None:
+            return False
+        timestamp = entry.get('timestamp')
+        if timestamp is None:
+            # Legacy entries without a timestamp are kept (not expired)
+            return False
+        return (time.time() - timestamp) > self.max_age_seconds
+
+    def _evict_expired(self) -> int:
+        """Remove all expired cache entries.
+        
+        Returns:
+            Number of entries removed.
+        """
+        if self.max_age_seconds is None:
+            return 0
+        before = len(self.cache)
+        self.cache = [e for e in self.cache if not self._is_entry_expired(e)]
+        removed = before - len(self.cache)
+        if removed > 0:
+            logger.info(f"Evicted {removed} expired cache entries")
+        return removed
+
     def get(self, query: str) -> Optional[str]:
-        """Retrieve cached result if similar query exists"""
+        """Retrieve cached result if similar query exists.
+        
+        Expired entries (based on TTL) are skipped during lookup.
+        """
         query_vec = self.vectorize(query)
         
         for entry in self.cache:
+            # Skip expired entries
+            if self._is_entry_expired(entry):
+                continue
             similarity = self.cosine_similarity(query_vec, entry['vector'])
             if similarity >= self.similarity_threshold:
                 logger.info(f"Cache hit! Similarity: {similarity:.4f}")
@@ -128,12 +169,13 @@ class SemanticCache:
         return None
     
     def put(self, query: str, result: str) -> None:
-        """Store query and result in cache"""
+        """Store query and result in cache with a creation timestamp."""
         query_vec = self.vectorize(query)
         self.cache.append({
             'query': query,
             'vector': query_vec,
-            'result': result
+            'result': result,
+            'timestamp': time.time()
         })
         logger.info(f"Cached query: {query[:50]}...")
     
@@ -248,7 +290,8 @@ class SemanticCache:
                 'cache': self.cache,
                 'similarity_threshold': self.similarity_threshold,
                 'cache_size': len(self.cache),
-                'format_version': '1.0'
+                'format_version': '1.1',
+                'max_age_seconds': self.max_age_seconds,
             }
             
             with open(filepath, 'w') as f:
@@ -278,6 +321,11 @@ class SemanticCache:
                 
                 self.cache = data.get('cache', [])
                 self.similarity_threshold = data.get('similarity_threshold', self.similarity_threshold)
+
+                # Restore persisted TTL setting (if any)
+                saved_max_age = data.get('max_age_seconds')
+                if saved_max_age is not None:
+                    self.max_age_seconds = float(saved_max_age)
                 
                 logger.info(f"Semantic cache loaded from JSON: {filepath} ({len(self.cache)} entries)")
                 
@@ -288,14 +336,20 @@ class SemanticCache:
             logger.debug(f"No JSON cache file found at {filepath}")
     
     def get_cache_stats(self) -> Dict[str, Any]:
-        """Get cache statistics"""
-        return {
+        """Get cache statistics including TTL information."""
+        stats: Dict[str, Any] = {
             'total_entries': len(self.cache),
             'similarity_threshold': self.similarity_threshold,
             'cache_file': str(self.cache_path),
             'cache_exists': self.cache_path.exists(),
-            'cache_size_bytes': self.cache_path.stat().st_size if self.cache_path.exists() else 0
+            'cache_size_bytes': self.cache_path.stat().st_size if self.cache_path.exists() else 0,
         }
+        if self.max_age_seconds is not None:
+            stats['max_age_hours'] = self.max_age_seconds / 3600.0
+            # Count how many entries are currently expired
+            expired = sum(1 for e in self.cache if self._is_entry_expired(e))
+            stats['expired_entries'] = expired
+        return stats
     
     def explain_query(self, query: str) -> Dict[str, Any]:
         """
@@ -345,8 +399,10 @@ class SemanticCache:
         best_match = None
         best_similarity = 0.0
         
-        # Analyze cache entries safely
+        # Analyze cache entries safely (skip expired)
         for i, entry in enumerate(self.cache):
+            if self._is_entry_expired(entry):
+                continue
             try:
                 similarity = self.cosine_similarity(query_vec, entry.get('vector', []))
             except Exception as e:
@@ -389,11 +445,35 @@ class SemanticCache:
             'top_matches': cache_analysis[:5]  # Top 5 similar cached queries
         }
     
-    def set_cache_expiration(self, max_age_hours: int = 24) -> None:
-        """Remove cache entries older than specified hours (future enhancement)"""
-        # This would require adding timestamps to cache entries
-        # For now, just a placeholder for TTL functionality
-        logger.info(f"Cache expiration set to {max_age_hours} hours (not yet implemented)")
+    def set_cache_expiration(self, max_age_hours: float = 24) -> int:
+        """Set TTL and immediately evict cache entries older than *max_age_hours*.
+
+        After calling this method every subsequent :meth:`get` call will
+        transparently skip entries that have exceeded the TTL, and every
+        :meth:`save_cache` / :meth:`save_cache_json` call will persist the
+        TTL setting so it survives restarts.
+
+        Args:
+            max_age_hours: Maximum age of a cache entry in hours.
+                Must be a positive number.
+
+        Returns:
+            Number of expired entries that were evicted.
+
+        Raises:
+            ValueError: If *max_age_hours* is not positive.
+        """
+        if max_age_hours <= 0:
+            raise ValueError("max_age_hours must be a positive number")
+
+        self.max_age_seconds = max_age_hours * 3600.0
+        evicted = self._evict_expired()
+        logger.info(
+            "Cache expiration set to %.2f hours – evicted %d stale entries",
+            max_age_hours,
+            evicted,
+        )
+        return evicted
     
     def optimize_cache(self, max_entries: int = 1000) -> None:
         """Remove oldest entries if cache exceeds max size"""
