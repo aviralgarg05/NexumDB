@@ -5,7 +5,9 @@ Model Manager for automatic download and caching of quantized LLMs
 import os
 from typing import Optional
 from pathlib import Path
+import logging
 
+logger = logging.getLogger(__name__)
 
 class ModelManager:
     """
@@ -21,7 +23,7 @@ class ModelManager:
         """
         self.models_dir = Path(models_dir)
         self.models_dir.mkdir(parents=True, exist_ok=True)
-        print(f"ModelManager initialized with directory: {self.models_dir}")
+        logger.info(f"ModelManager initialized with directory: {self.models_dir}")
     
     def ensure_model(
         self,
@@ -43,13 +45,13 @@ class ModelManager:
         local_path = self.models_dir / model_name
         
         if local_path.exists():
-            print(f"Model found at {local_path}")
+            logger.info(f"Model found at {local_path}")
             return str(local_path)
         
         if repo_id and filename:
             return self._download_model(repo_id, filename, local_path)
         
-        print(f"Model not found and no download info provided: {model_name}")
+        logger.warning(f"Model not found and no download info provided: {model_name}")
         return None
     
     def _download_model(self, repo_id: str, filename: str, local_path: Path) -> Optional[str]:
@@ -67,8 +69,8 @@ class ModelManager:
         try:
             from huggingface_hub import hf_hub_download
             
-            print(f"Downloading {filename} from {repo_id}...")
-            print("This may take several minutes for large models...")
+            logger.info(f"Downloading {filename} from {repo_id}...")
+            logger.info("This may take several minutes for large models...")
             
             downloaded_path = hf_hub_download(
                 repo_id=repo_id,
@@ -79,24 +81,24 @@ class ModelManager:
             
             final_path = self.models_dir / filename
             if final_path.exists():
-                print(f"Model downloaded successfully to {final_path}")
+                logger.info(f"Model downloaded successfully to {final_path}")
                 return str(final_path)
             else:
-                print("Model download completed but file not found at expected location")
+                logger.warning("Model download completed but file not found at expected location")
                 return downloaded_path if os.path.exists(downloaded_path) else None
                 
         except ImportError:
-            print("Error: huggingface_hub not installed. Install with: pip install huggingface-hub")
+            logger.error("huggingface_hub not installed. Install with: pip install huggingface-hub")
             return None
-        except Exception as e:
-            print(f"Error downloading model: {e}")
-            print("Please check your internet connection and HuggingFace credentials")
+        except Exception:
+            logger.exception("Error downloading model")
+            logger.info("Please check your internet connection and HuggingFace credentials")
             return None
     
     def list_models(self):
         """List all models in the models directory"""
         if not self.models_dir.exists():
-            print(f"Models directory does not exist: {self.models_dir}")
+            logger.error(f"Models directory does not exist: {self.models_dir}")
             return []
         
         models = list(self.models_dir.glob("*.gguf"))
@@ -107,20 +109,20 @@ def test_model_manager():
     """Test the ModelManager with a small model"""
     manager = ModelManager()
     
-    print("\nTesting ModelManager:")
-    print("=" * 60)
+    logger.info("Testing ModelManager:")
+    logger.info("=" * 60)
     
-    print("\nListing existing models:")
+    logger.info("Listing existing models:")
     models = manager.list_models()
     if models:
         for model in models:
-            print(f"  - {model}")
+            logger.info(f"  - {model}")
     else:
-        print("  No models found")
+        logger.error("  No models found")
     
-    print("\nNote: Automatic download disabled in test mode")
-    print("To download a model, call:")
-    print("  manager.ensure_model('phi-2.Q4_K_M.gguf', 'TheBloke/phi-2-GGUF', 'phi-2.Q4_K_M.gguf')")
+    logger.info("Note: Automatic download disabled in test mode")
+    logger.info("To download a model, call:")
+    logger.info("  manager.ensure_model('phi-2.Q4_K_M.gguf', 'TheBloke/phi-2-GGUF', 'phi-2.Q4_K_M.gguf')")
 
 
 if __name__ == "__main__":

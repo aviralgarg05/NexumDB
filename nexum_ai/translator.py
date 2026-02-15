@@ -5,6 +5,9 @@ Uses llama-cpp-python for local model inference
 
 from typing import Optional
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 try:
     from llama_cpp import Llama
@@ -43,23 +46,23 @@ class NLTranslator:
         
         if model_path and os.path.exists(model_path):
             if Llama is None:
-                print("Warning: llama-cpp-python not installed. NL translation will use fallback.")
+                logger.warning("llama-cpp-python not installed. NL translation will use fallback.")
                 self.model = None
             else:
                 try:
-                    print(f"Loading LLM from {model_path}...")
+                    logger.info(f"Loading LLM from {model_path}...")
                     self.model = Llama(
                         model_path=model_path,
                         n_ctx=n_ctx,
                         n_threads=4,
                         verbose=False
                     )
-                    print("LLM loaded successfully")
-                except Exception as e:
-                    print(f"Warning: Could not load LLM: {e}")
+                    logger.info("LLM loaded successfully")
+                except Exception :
+                    logger.exception("Could not load LLM")
                     self.model = None
         else:
-            print("Warning: No model path provided or download failed. NL translation will use fallback.")
+            logger.warning("No model path provided or download failed. NL translation will use fallback.")
     
     def translate(self, natural_query: str, schema: str = "") -> str:
         """
@@ -89,11 +92,11 @@ class NLTranslator:
             sql = response['choices'][0]['text'].strip()
             sql = self._clean_sql(sql)
             
-            print(f"Translated: '{natural_query}' -> '{sql}'")
+            logger.info(f"Translated: '{natural_query}' -> '{sql}'")
             return sql
             
-        except Exception as e:
-            print(f"Translation error: {e}")
+        except Exception :
+            logger.exception("Translation error")
             return self._fallback_translation(natural_query, schema)
     
     def _build_prompt(self, natural_query: str, schema: str) -> str:
@@ -184,13 +187,12 @@ def test_translator() -> None:
         "Find products that cost more than 500",
     ]
     
-    print("\nNatural Language Translation Tests:")
-    print("=" * 60)
+    logger.info("Natural Language Translation Tests:")
+    logger.info("=" * 60)
     for nl_query in test_cases:
         sql = translator.translate(nl_query, schema)
-        print(f"NL: {nl_query}")
-        print(f"SQL: {sql}")
-        print()
+        logger.info(f"NL: {nl_query}")
+        logger.info(f"SQL: {sql}")
 
 
 if __name__ == "__main__":
