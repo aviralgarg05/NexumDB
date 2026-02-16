@@ -16,7 +16,7 @@ path = "src/main.rs"
 nexum_core = { path = "../nexum_core" }
 anyhow = { workspace = true }
 tokio = { workspace = true }
-colored = "2.1"
+colored = "3.1"
 comfy-table = "7.1"
 indicatif = "0.18"
 clap = { version = "4.5", features = ["derive"] }
