@@ -1025,6 +1025,19 @@ impl Executor {
         }
     }
 
+    fn resolve_column_index(schema: &crate::sql::types::TableSchema, col_name: &str) -> Result<usize> {
+        schema
+            .columns
+            .iter()
+            .position(|c| c.name == *col_name)
+            .ok_or_else(|| {
+                StorageError::ReadError(format!(
+                    "Column {} not found",
+                    col_name
+                ))
+            })
+    }
+
     fn execute_aggregate(
         &self,
         schema: &crate::sql::types::TableSchema,
@@ -1049,17 +1062,8 @@ impl Executor {
                             } else {
                                 // COUNT(column) - distinct non-null values? Standard SQL is count non-null.
                                 let col_name = column.as_ref().unwrap();
-                                let col_idx = schema
-                                    .columns
-                                    .iter()
-                                    .position(|c| c.name == *col_name)
-                                    .ok_or_else(|| {
-                                        StorageError::ReadError(format!(
-                                            "Column {} not found",
-                                            col_name
-                                        ))
-                                    })?;
-                                
+                                let col_idx = Self::resolve_column_index(schema, col_name)?;
+
                                 let count = rows
                                     .iter()
                                     .filter(|r| !matches!(r.values[col_idx], Value::Null))
@@ -1069,16 +1073,7 @@ impl Executor {
                         }
                         crate::sql::types::AggregateType::Sum => {
                             if let Some(col_name) = column {
-                                let col_idx = schema
-                                    .columns
-                                    .iter()
-                                    .position(|c| c.name == *col_name)
-                                    .ok_or_else(|| {
-                                        StorageError::ReadError(format!(
-                                            "Column {} not found",
-                                            col_name
-                                        ))
-                                    })?;
+                                let col_idx = Self::resolve_column_index(schema, col_name)?;
 
                                 let mut sum_int = 0i64;
                                 let mut sum_float = 0.0f64;
@@ -1113,16 +1108,7 @@ impl Executor {
                         }
                         crate::sql::types::AggregateType::Avg => {
                              if let Some(col_name) = column {
-                                let col_idx = schema
-                                    .columns
-                                    .iter()
-                                    .position(|c| c.name == *col_name)
-                                    .ok_or_else(|| {
-                                        StorageError::ReadError(format!(
-                                            "Column {} not found",
-                                            col_name
-                                        ))
-                                    })?;
+                                let col_idx = Self::resolve_column_index(schema, col_name)?;
 
                                 let mut sum = 0.0f64;
                                 let mut count = 0;
@@ -1192,16 +1178,7 @@ impl Executor {
 
     fn calculate_min_max(schema: &crate::sql::types::TableSchema, rows: &[Row], column: &Option<String>, is_min: bool) -> Result<Value> {
          if let Some(col_name) = column {
-            let col_idx = schema
-                .columns
-                .iter()
-                .position(|c| c.name == *col_name)
-                .ok_or_else(|| {
-                    StorageError::ReadError(format!(
-                        "Column {} not found",
-                        col_name
-                    ))
-                })?;
+            let col_idx = Self::resolve_column_index(schema, col_name)?;
 
             let mut current: Option<Value> = None;
 
@@ -1222,6 +1199,14 @@ impl Executor {
                     (Value::Integer(c), Value::Integer(v)) => if is_min { v < c } else { v > c },
                     (Value::Float(c), Value::Float(v)) => if is_min { v < c } else { v > c },
                     (Value::Text(c), Value::Text(v)) => if is_min { v < c } else { v > c }, // Text comparison
+                    (Value::Integer(c), Value::Float(v)) => {
+                        let cf = *c as f64;
+                        if is_min { *v < cf } else { *v > cf }
+                    },
+                    (Value::Float(c), Value::Integer(v)) => {
+                        let vf = *v as f64;
+                        if is_min { vf < *c } else { vf > *c }
+                    },
                     _ => false // Mixed types or unsupported
                 };
                 

@@ -1,4 +1,4 @@
-use nexum_core::{Executor, Parser, StorageEngine, sql::types::{Value, ExecutionResult}};
+use nexum_core::{Executor, executor::ExecutionResult, Parser, StorageEngine, sql::types::Value};
 
 #[test]
 fn test_count_aggregate() {
@@ -66,7 +66,7 @@ fn test_sum_avg_aggregate() {
                 panic!("Expected integer sum");
             }
         }
-        _ => panic!("Expected Selected result");
+        _ => panic!("Expected Selected result"),
     }
 
     // Test SUM(value) - Float
@@ -80,7 +80,7 @@ fn test_sum_avg_aggregate() {
                 panic!("Expected float sum");
             }
         }
-        _ => panic!("Expected Selected result");
+        _ => panic!("Expected Selected result"),
     }
 
      // Test AVG(amount)
@@ -94,7 +94,7 @@ fn test_sum_avg_aggregate() {
                 panic!("Expected float avg, got {:?}", rows[0].values[0]);
             }
         }
-        _ => panic!("Expected Selected result");
+        _ => panic!("Expected Selected result"),
     }
 }
 
@@ -122,7 +122,7 @@ fn test_min_max_aggregate() {
                 panic!("Expected integer min");
             }
         }
-        _ => panic!("Expected Selected result");
+        _ => panic!("Expected Selected result"),
     }
 
     // Test MAX
@@ -136,7 +136,7 @@ fn test_min_max_aggregate() {
                 panic!("Expected integer max");
             }
         }
-        _ => panic!("Expected Selected result");
+        _ => panic!("Expected Selected result"),
     }
 }
 
@@ -176,6 +176,88 @@ fn test_mixed_aggregates() {
                 assert_eq!(m, 3);
             } else { panic!("Wrong type"); }
         }
-        _ => panic!("Expected Selected result");
+        _ => panic!("Expected Selected result"),
     }
 }
+
+#[test]
+fn test_empty_table_aggregates() {
+    let storage = StorageEngine::memory().unwrap();
+    let executor = Executor::new(storage);
+
+    let create = Parser::parse("CREATE TABLE empty (id INTEGER)").unwrap();
+    executor.execute(create).unwrap();
+
+    // COUNT(*) should be 0
+    let select = Parser::parse("SELECT COUNT(*) FROM empty").unwrap();
+    if let ExecutionResult::Selected { rows, .. } = executor.execute(select).unwrap() {
+        assert_eq!(rows[0].values[0], Value::Integer(0));
+    } else {
+        panic!("Expected Selected result");
+    }
+
+    // MIN/MAX/SUM/AVG should be NULL
+    let select = Parser::parse("SELECT MIN(id), MAX(id), SUM(id), AVG(id) FROM empty").unwrap();
+    if let ExecutionResult::Selected { rows, .. } = executor.execute(select).unwrap() {
+        let vals = &rows[0].values;
+        assert!(matches!(vals[0], Value::Null));
+        assert!(matches!(vals[1], Value::Null));
+        assert!(matches!(vals[2], Value::Null));
+        assert!(matches!(vals[3], Value::Null));
+    } else {
+        panic!("Expected Selected result");
+    }
+}
+
+#[test]
+fn test_null_only_aggregates() {
+    let storage = StorageEngine::memory().unwrap();
+    let executor = Executor::new(storage);
+
+    let create = Parser::parse("CREATE TABLE nulls (val INTEGER)").unwrap();
+    executor.execute(create).unwrap();
+
+    let insert = Parser::parse("INSERT INTO nulls (val) VALUES (NULL), (NULL)").unwrap();
+    executor.execute(insert).unwrap();
+
+     // SUM/AVG should be NULL
+    let select = Parser::parse("SELECT SUM(val), AVG(val) FROM nulls").unwrap();
+    if let ExecutionResult::Selected { rows, .. } = executor.execute(select).unwrap() {
+        let vals = &rows[0].values;
+         assert!(matches!(vals[0], Value::Null));
+         assert!(matches!(vals[1], Value::Null));
+    } else {
+        panic!("Expected Selected result");
+    }
+}
+
+#[test]
+fn test_min_max_types() {
+    let storage = StorageEngine::memory().unwrap();
+    let executor = Executor::new(storage);
+
+    let create = Parser::parse("CREATE TABLE mixed (f FLOAT, t TEXT)").unwrap();
+    executor.execute(create).unwrap();
+
+    let insert = Parser::parse(
+        "INSERT INTO mixed (f, t) VALUES (1.5, 'a'), (2.5, 'b'), (0.5, 'c')",
+    ).unwrap();
+    executor.execute(insert).unwrap();
+
+    // MIN(f)
+    let select = Parser::parse("SELECT MIN(f) FROM mixed").unwrap();
+    if let ExecutionResult::Selected { rows, .. } = executor.execute(select).unwrap() {
+         if let Value::Float(f) = rows[0].values[0] {
+            assert!((f - 0.5).abs() < f64::EPSILON);
+        } else { panic!("Expected Float"); }
+    }
+
+    // MAX(t)
+    let select = Parser::parse("SELECT MAX(t) FROM mixed").unwrap();
+    if let ExecutionResult::Selected { rows, .. } = executor.execute(select).unwrap() {
+         if let Value::Text(ref t) = rows[0].values[0] {
+            assert_eq!(t, "c");
+        } else { panic!("Expected Text"); }
+    }
+}
+
