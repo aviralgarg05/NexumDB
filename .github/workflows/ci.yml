@@ -26,6 +26,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Fail if junk files are tracked
+        run: |
+          echo "Checking for forbidden tracked files..."
+          if git ls-files | grep -E '\.DS_Store|\.coverage|htmlcov'; then
+            echo "❌ Forbidden tracked files detected!"
+            exit 1
+          fi
+          echo "✅ Repository clean."
+
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -168,6 +177,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Fail if junk files are tracked
+        run: |
+          echo "Checking for forbidden tracked files..."
+          if git ls-files | grep -E '\.DS_Store|\.coverage|htmlcov'; then
+            echo "❌ Forbidden tracked files detected!"
+            exit 1
+          fi
+          echo "✅ Repository clean."
 
       - name: Set up Python
         uses: actions/setup-python@v5
