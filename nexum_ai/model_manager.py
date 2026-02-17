@@ -23,7 +23,7 @@ class ModelManager:
         """
         self.models_dir = Path(models_dir)
         self.models_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"ModelManager initialized with directory: {self.models_dir}")
+        logger.debug(f"ModelManager initialized with directory: {self.models_dir}")
     
     def ensure_model(
         self,
@@ -45,7 +45,7 @@ class ModelManager:
         local_path = self.models_dir / model_name
         
         if local_path.exists():
-            logger.info(f"Model found at {local_path}")
+            logger.debug(f"Model found at {local_path}")
             return str(local_path)
         
         if repo_id and filename:
@@ -81,7 +81,7 @@ class ModelManager:
             
             final_path = self.models_dir / filename
             if final_path.exists():
-                logger.info(f"Model downloaded successfully to {final_path}")
+                logger.debug(f"Model downloaded successfully to {final_path}")
                 return str(final_path)
             else:
                 logger.warning("Model download completed but file not found at expected location")
@@ -90,15 +90,17 @@ class ModelManager:
         except ImportError:
             logger.error("huggingface_hub not installed. Install with: pip install huggingface-hub")
             return None
-        except Exception:
-            logger.exception("Error downloading model")
-            logger.info("Please check your internet connection and HuggingFace credentials")
+        except Exception as e:
+            logger.exception(
+                "Error downloading model. "
+                "Please check your internet connection and HuggingFace credentials."
+            )
             return None
     
-    def list_models(self):
+    def list_models(self) -> list[str]:
         """List all models in the models directory"""
         if not self.models_dir.exists():
-            logger.error(f"Models directory does not exist: {self.models_dir}")
+            logger.warning(f"Models directory does not exist: {self.models_dir}")
             return []
         
         models = list(self.models_dir.glob("*.gguf"))
@@ -118,7 +120,7 @@ def test_model_manager():
         for model in models:
             logger.info(f"  - {model}")
     else:
-        logger.error("  No models found")
+        logger.info("  No models found")
     
     logger.info("Note: Automatic download disabled in test mode")
     logger.info("To download a model, call:")

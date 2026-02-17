@@ -50,7 +50,7 @@ class NLTranslator:
                 self.model = None
             else:
                 try:
-                    logger.info(f"Loading LLM from {model_path}...")
+                    logger.debug(f"Loading LLM from {model_path}...")
                     self.model = Llama(
                         model_path=model_path,
                         n_ctx=n_ctx,
@@ -58,7 +58,7 @@ class NLTranslator:
                         verbose=False
                     )
                     logger.info("LLM loaded successfully")
-                except Exception :
+                except Exception:
                     logger.exception("Could not load LLM")
                     self.model = None
         else:
@@ -92,10 +92,10 @@ class NLTranslator:
             sql = response['choices'][0]['text'].strip()
             sql = self._clean_sql(sql)
             
-            logger.info(f"Translated: '{natural_query}' -> '{sql}'")
+            logger.debug(f"Translated: '{natural_query}' -> '{sql}'")
             return sql
             
-        except Exception :
+        except Exception:
             logger.exception("Translation error")
             return self._fallback_translation(natural_query, schema)
     
@@ -196,4 +196,5 @@ def test_translator() -> None:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level = logging.INFO)
     test_translator()
