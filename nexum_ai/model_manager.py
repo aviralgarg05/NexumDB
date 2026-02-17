@@ -90,7 +90,7 @@ class ModelManager:
         except ImportError:
             logger.error("huggingface_hub not installed. Install with: pip install huggingface-hub")
             return None
-        except Exception as e:
+        except Exception:
             logger.exception(
                 "Error downloading model. "
                 "Please check your internet connection and HuggingFace credentials."
