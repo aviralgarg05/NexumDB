@@ -4,8 +4,8 @@ resolver = "2"
 
 [workspace.dependencies]
 sled = "0.34"
-sqlparser = "0.39"
-pyo3 = { version = "0.24", features = ["auto-initialize"] }
+sqlparser = "0.61"
+pyo3 = { version = "0.28", features = ["auto-initialize"] }
 anyhow = "1.0"
 thiserror = "1.0"
 tokio = { version = "1.49", features = ["full"] }

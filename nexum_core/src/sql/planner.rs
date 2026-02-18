@@ -2,6 +2,9 @@ use super::types::Statement;
 
 #[derive(Debug, Clone)]
 pub enum Plan {
+    BeginTransaction,
+    CommitTransaction,
+    RollbackTransaction,
     CreateTable {
         name: String,
         columns: Vec<(String, String)>,
@@ -38,6 +41,9 @@ pub struct Planner;
 impl Planner {
     pub fn plan(statement: Statement) -> Plan {
         match statement {
+            Statement::BeginTransaction => Plan::BeginTransaction,
+            Statement::CommitTransaction => Plan::CommitTransaction,
+            Statement::RollbackTransaction => Plan::RollbackTransaction,
             Statement::CreateTable { name, columns } => {
                 let cols = columns
                     .iter()
