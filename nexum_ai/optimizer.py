@@ -117,11 +117,15 @@ class SemanticCache:
         
         return float(dot_product / (norm1 * norm2))
     
-    def _is_entry_expired(self, entry: Dict) -> bool:
+    def _is_entry_expired(self, entry: Dict, now: Optional[float] = None) -> bool:
         """Check if a cache entry has exceeded its TTL.
         
         Args:
             entry: Cache entry dict, expected to contain a 'timestamp' key.
+            now: Current time as a Unix timestamp. If *None*, ``time.time()``
+                is called. Callers iterating over many entries should snapshot
+                the current time once and pass it in to avoid redundant
+                syscalls and subtle inconsistencies.
         
         Returns:
             True if the entry is expired, False otherwise.
@@ -133,7 +137,9 @@ class SemanticCache:
         if timestamp is None:
             # Legacy entries without a timestamp are kept (not expired)
             return False
-        return (time.time() - timestamp) > self.max_age_seconds
+        if now is None:
+            now = time.time()
+        return (now - timestamp) > self.max_age_seconds
 
     def _evict_expired(self) -> int:
         """Remove all expired cache entries.
@@ -143,8 +149,9 @@ class SemanticCache:
         """
         if self.max_age_seconds is None:
             return 0
+        now = time.time()
         before = len(self.cache)
-        self.cache = [e for e in self.cache if not self._is_entry_expired(e)]
+        self.cache = [e for e in self.cache if not self._is_entry_expired(e, now=now)]
         removed = before - len(self.cache)
         if removed > 0:
             logger.info(f"Evicted {removed} expired cache entries")
@@ -156,10 +163,11 @@ class SemanticCache:
         Expired entries (based on TTL) are skipped during lookup.
         """
         query_vec = self.vectorize(query)
+        now = time.time()
         
         for entry in self.cache:
             # Skip expired entries
-            if self._is_entry_expired(entry):
+            if self._is_entry_expired(entry, now=now):
                 continue
             similarity = self.cosine_similarity(query_vec, entry['vector'])
             if similarity >= self.similarity_threshold:
@@ -328,6 +336,9 @@ class SemanticCache:
                     self.max_age_seconds = float(saved_max_age)
                 
                 logger.info(f"Semantic cache loaded from JSON: {filepath} ({len(self.cache)} entries)")
+
+                # Evict entries that became stale while the process was down
+                self._evict_expired()
                 
             except Exception:
                 logger.exception("Error loading cache from JSON")
@@ -337,17 +348,23 @@ class SemanticCache:
     
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get cache statistics including TTL information."""
+        try:
+            cache_size_bytes = self.cache_path.stat().st_size
+        except OSError:
+            cache_size_bytes = 0
+
         stats: Dict[str, Any] = {
             'total_entries': len(self.cache),
             'similarity_threshold': self.similarity_threshold,
             'cache_file': str(self.cache_path),
             'cache_exists': self.cache_path.exists(),
-            'cache_size_bytes': self.cache_path.stat().st_size if self.cache_path.exists() else 0,
+            'cache_size_bytes': cache_size_bytes,
         }
         if self.max_age_seconds is not None:
+            now = time.time()
             stats['max_age_hours'] = self.max_age_seconds / 3600.0
             # Count how many entries are currently expired
-            expired = sum(1 for e in self.cache if self._is_entry_expired(e))
+            expired = sum(1 for e in self.cache if self._is_entry_expired(e, now=now))
             stats['expired_entries'] = expired
         return stats
     
@@ -400,8 +417,9 @@ class SemanticCache:
         best_similarity = 0.0
         
         # Analyze cache entries safely (skip expired)
+        now = time.time()
         for i, entry in enumerate(self.cache):
-            if self._is_entry_expired(entry):
+            if self._is_entry_expired(entry, now=now):
                 continue
             try:
                 similarity = self.cosine_similarity(query_vec, entry.get('vector', []))

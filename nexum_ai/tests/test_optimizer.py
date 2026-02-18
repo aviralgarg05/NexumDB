@@ -3,7 +3,8 @@ Unit tests for optimizer.py - Query optimization logic
 """
 
 import time
-from unittest.mock import patch
+
+import pytest
 
 from nexum_ai.optimizer import SemanticCache, QueryOptimizer
 
@@ -133,7 +134,6 @@ class TestSemanticCacheTTL:
     def test_set_cache_expiration_rejects_non_positive(self):
         """set_cache_expiration must reject zero or negative hours."""
         cache = SemanticCache()
-        import pytest
         with pytest.raises(ValueError):
             cache.set_cache_expiration(0)
         with pytest.raises(ValueError):
@@ -217,9 +217,10 @@ class TestSemanticCacheTTL:
         cache.max_age_seconds = 3600.0
 
         explanation = cache.explain_query("SELECT * FROM users")
-        # The expired entry should not appear
-        assert explanation['cache_entries_checked'] == 1  # total in list
-        assert len(explanation['top_matches']) == 0  # but none analysed
+        # cache_entries_checked reports len(self.cache) which includes expired
+        # entries; top_matches only contains entries that were actually analysed.
+        assert explanation['cache_entries_checked'] == 1
+        assert len(explanation['top_matches']) == 0
 
     def test_get_cache_stats_includes_ttl_info(self):
         """Stats dict must include TTL fields when TTL is active."""
@@ -235,7 +236,8 @@ class TestSemanticCacheTTL:
 
     def test_ttl_persists_across_save_load(self):
         """max_age_seconds should survive a save/load cycle."""
-        import tempfile, os
+        import tempfile
+        import os
         with tempfile.TemporaryDirectory() as td:
             path = os.path.join(td, "ttl_test.json")
             cache1 = SemanticCache()
