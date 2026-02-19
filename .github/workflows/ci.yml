@@ -26,10 +26,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Detect Rust-relevant changes
+        id: rust_changes
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          if ! git merge-base "origin/${{ github.base_ref }}" HEAD >/dev/null 2>&1; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -Eq '(^|/)(Cargo\.toml|Cargo\.lock|rust-toolchain(\.toml)?)$|(^|/)\.cargo/|\.rs$'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip Rust build/test for non-Rust changes
+        if: steps.rust_changes.outputs.changed != 'true'
+        run: echo "No Rust-relevant file changes detected; skipping Rust compile/test steps."
+
       - name: Set up Rust
+        if: steps.rust_changes.outputs.changed == 'true'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
+        if: steps.rust_changes.outputs.changed == 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -41,39 +67,47 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Install cargo-audit
+        if: steps.rust_changes.outputs.changed == 'true'
         run: |
           if ! command -v cargo-audit &> /dev/null; then
             cargo install cargo-audit --locked
           fi
 
       - name: fmt
+        if: steps.rust_changes.outputs.changed == 'true'
         run: cargo fmt --all -- --check
 
       - name: clippy
+        if: steps.rust_changes.outputs.changed == 'true'
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: tests
+        if: steps.rust_changes.outputs.changed == 'true'
         run: cargo test --workspace -- --test-threads=1
 
       - name: Install cargo-llvm-cov
+        if: steps.rust_changes.outputs.changed == 'true'
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Run tests with coverage
+        if: steps.rust_changes.outputs.changed == 'true'
         run: cargo llvm-cov --workspace --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
+        if: ${{ always() && steps.rust_changes.outputs.changed == 'true' }}
         uses: codecov/codecov-action@v4
         with:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
-        if: always()
 
       - name: Build documentation
+        if: steps.rust_changes.outputs.changed == 'true'
         run: cargo doc --workspace --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
 
       - name: Security audit
+        if: steps.rust_changes.outputs.changed == 'true'
         run: cargo audit
 
   benchmarks:
