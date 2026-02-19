@@ -32,13 +32,33 @@ jobs:
       - name: Detect Rust-relevant changes
         id: rust_changes
         run: |
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
+          RUST_FILE_REGEX='(^|/)(Cargo\.toml|Cargo\.lock|rust-toolchain(\.toml)?)$|(^|/)\.cargo/|\.rs$'
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+            CHANGED_FILES="$(git diff --name-only "origin/${{ github.base_ref }}" HEAD)"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            if ! git cat-file -e "${{ github.event.before }}^{commit}" 2>/dev/null; then
+              git fetch --no-tags --depth=1 origin "${{ github.event.before }}" || true
+            fi
+
+            if ! git cat-file -e "${{ github.event.before }}^{commit}" 2>/dev/null; then
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            CHANGED_FILES="$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")"
+          else
             echo "changed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
-          if git diff --name-only "origin/${{ github.base_ref }}" HEAD | grep -Eq '(^|/)(Cargo\.toml|Cargo\.lock|rust-toolchain(\.toml)?)$|(^|/)\.cargo/|\.rs$'; then
+          if printf '%s\n' "$CHANGED_FILES" | grep -Eq "$RUST_FILE_REGEX"; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
