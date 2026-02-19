@@ -38,7 +38,7 @@ jobs:
           fi
 
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
-          if git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -Eq '(^|/)(Cargo\.toml|Cargo\.lock|rust-toolchain(\.toml)?)$|(^|/)\.cargo/|\.rs$'; then
+          if git diff --name-only "origin/${{ github.base_ref }}" HEAD | grep -Eq '(^|/)(Cargo\.toml|Cargo\.lock|rust-toolchain(\.toml)?)$|(^|/)\.cargo/|\.rs$'; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
