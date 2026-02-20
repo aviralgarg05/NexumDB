@@ -22,7 +22,7 @@ def demo_cache_persistence():
     
     # Session 1: Populate cache
     print("\nSession 1: Populating semantic cache...")
-    cache1 = SemanticCache(cache_file="demo_cache.pkl")
+    cache1 = SemanticCache(cache_file="demo_cache.sqlite")
     
     # Simulate typical database queries
     demo_queries = [
@@ -52,7 +52,7 @@ def demo_cache_persistence():
     
     # Session 2: Load from disk
     print("\nSession 2: Loading cache from disk...")
-    cache2 = SemanticCache(cache_file="demo_cache.pkl")
+    cache2 = SemanticCache(cache_file="demo_cache.sqlite")
     
     stats2 = cache2.get_cache_stats()
     print(f"   Cache loaded: {stats2['total_entries']} entries")
@@ -105,7 +105,7 @@ def demo_cache_persistence():
     # Environment variable configuration
     print("\nEnvironment variable configuration:")
     print("   Set NEXUMDB_CACHE_FILE to customize cache location")
-    print("   Example: export NEXUMDB_CACHE_FILE=my_custom_cache.pkl")
+    print("   Example: export NEXUMDB_CACHE_FILE=my_custom_cache.sqlite")
     
     # Cleanup
     print("\nCleaning up demo files...")

@@ -47,8 +47,8 @@ def test_cache_persistence_lifecycle():
         
         # Test 2: Verify file exists
         print("\n2. Verifying cache file creation...")
-        # SemanticCache saves as .json by default even if .pkl is provided
-        actual_cache_file = cache_file.replace('.pkl', '.json')
+        # SemanticCache persists to SQLite; legacy .pkl/.json paths are migrated on first run
+        actual_cache_file = cache_file.replace('.pkl', '.sqlite')
         assert os.path.exists(actual_cache_file), f"Cache file {actual_cache_file} should exist"
         file_size = os.path.getsize(actual_cache_file)
         print(f"   Cache file exists ({file_size} bytes)")
@@ -95,7 +95,7 @@ def test_cache_persistence_lifecycle():
         print("\n7. Testing cache clearing...")
         cache2.clear()
         
-        assert not os.path.exists(cache_file), "Cache file should be deleted"
+        assert not os.path.exists(actual_cache_file), "Cache file should be deleted"
         print("   Cache cleared successfully")
         
         print("\nAll tests passed!")
@@ -120,7 +120,7 @@ def test_environment_variable_config():
             cache.save_cache()
             
             # Verify it used the custom path
-            actual_custom_cache = custom_cache.replace('.pkl', '.json')
+            actual_custom_cache = custom_cache.replace('.pkl', '.sqlite')
             assert os.path.exists(actual_custom_cache), f"Should use environment variable path: {actual_custom_cache}"
             print("   Environment variable configuration works")
             

@@ -68,7 +68,7 @@ pub struct SemanticCache {
 
 impl SemanticCache {
     pub fn new() -> Result<Self> {
-        Self::with_cache_file("semantic_cache.pkl")
+        Self::with_cache_file("semantic_cache.sqlite")
     }
 
     pub fn with_cache_file(cache_file: &str) -> Result<Self> {
