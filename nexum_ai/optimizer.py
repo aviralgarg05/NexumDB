@@ -330,10 +330,11 @@ class SemanticCache:
                 self.cache = data.get('cache', [])
                 self.similarity_threshold = data.get('similarity_threshold', self.similarity_threshold)
 
-                # Restore persisted TTL setting (if any)
+                # Always restore persisted TTL state so that loading
+                # a no-TTL cache into a TTL-enabled instance correctly
+                # clears the TTL rather than keeping the stale value.
                 saved_max_age = data.get('max_age_seconds')
-                if saved_max_age is not None:
-                    self.max_age_seconds = float(saved_max_age)
+                self.max_age_seconds = float(saved_max_age) if saved_max_age is not None else None
                 
                 logger.info(f"Semantic cache loaded from JSON: {filepath} ({len(self.cache)} entries)")
 

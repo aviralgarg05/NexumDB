@@ -250,6 +250,27 @@ class TestSemanticCacheTTL:
             assert cache2.max_age_seconds == 6 * 3600.0
             assert len(cache2.cache) == 1
 
+    def test_load_no_ttl_cache_resets_ttl(self):
+        """Loading a no-TTL cache into a TTL-enabled instance resets TTL."""
+        import tempfile
+        import os
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "no_ttl.json")
+
+            # Save a cache without TTL
+            cache1 = SemanticCache()
+            cache1.put("q1", "r1")
+            cache1.save_cache_json(path)
+
+            # Load into an instance that already has TTL set
+            cache2 = SemanticCache()
+            cache2.set_cache_expiration(1)
+            assert cache2.max_age_seconds is not None
+
+            cache2.load_cache_json(path)
+            assert cache2.max_age_seconds is None
+            assert len(cache2.cache) == 1
+
     def test_evict_expired_returns_count(self):
         """_evict_expired returns the number of removed entries."""
         cache = SemanticCache()
