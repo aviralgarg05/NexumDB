@@ -2,6 +2,8 @@
 Unit tests for optimizer.py - Query optimization logic
 """
 
+import os
+import tempfile
 import time
 
 import pytest
@@ -132,12 +134,30 @@ class TestSemanticCacheTTL:
         assert time.time() - entry['timestamp'] < 5
 
     def test_set_cache_expiration_rejects_non_positive(self):
-        """set_cache_expiration must reject zero or negative hours."""
+        """set_cache_expiration must reject zero and negative hours."""
         cache = SemanticCache()
         with pytest.raises(ValueError):
             cache.set_cache_expiration(0)
         with pytest.raises(ValueError):
             cache.set_cache_expiration(-1)
+
+    def test_set_cache_expiration_rejects_nan_and_inf(self):
+        """set_cache_expiration must reject NaN and infinite values."""
+        cache = SemanticCache()
+        with pytest.raises(ValueError):
+            cache.set_cache_expiration(float('nan'))
+        with pytest.raises(ValueError):
+            cache.set_cache_expiration(float('inf'))
+        with pytest.raises(ValueError):
+            cache.set_cache_expiration(float('-inf'))
+
+    def test_set_cache_expiration_rejects_non_numeric(self):
+        """set_cache_expiration must reject non-numeric types."""
+        cache = SemanticCache()
+        with pytest.raises(ValueError):
+            cache.set_cache_expiration("24")  # type: ignore[arg-type]
+        with pytest.raises(ValueError):
+            cache.set_cache_expiration(True)  # type: ignore[arg-type]
 
     def test_set_cache_expiration_sets_max_age(self):
         """set_cache_expiration stores the TTL internally."""
@@ -236,8 +256,6 @@ class TestSemanticCacheTTL:
 
     def test_ttl_persists_across_save_load(self):
         """max_age_seconds should survive a save/load cycle."""
-        import tempfile
-        import os
         with tempfile.TemporaryDirectory() as td:
             path = os.path.join(td, "ttl_test.json")
             cache1 = SemanticCache()
@@ -252,8 +270,6 @@ class TestSemanticCacheTTL:
 
     def test_load_no_ttl_cache_resets_ttl(self):
         """Loading a no-TTL cache into a TTL-enabled instance resets TTL."""
-        import tempfile
-        import os
         with tempfile.TemporaryDirectory() as td:
             path = os.path.join(td, "no_ttl.json")
 

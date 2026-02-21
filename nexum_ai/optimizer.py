@@ -2,6 +2,7 @@
 Semantic cache and query optimizer using local embedding models
 """
 import logging
+import math
 import numpy as np
 import time
 from typing import Optional, List, Dict, Any
@@ -159,21 +160,29 @@ class SemanticCache:
 
     def get(self, query: str) -> Optional[str]:
         """Retrieve cached result if similar query exists.
-        
+
         Expired entries (based on TTL) are skipped during lookup.
+        When expired entries are detected they are opportunistically
+        evicted so future lookups don't degrade over time.
         """
         query_vec = self.vectorize(query)
         now = time.time()
-        
+        found_expired = False
+
         for entry in self.cache:
-            # Skip expired entries
+            # Skip expired entries and flag for cleanup
             if self._is_entry_expired(entry, now=now):
+                found_expired = True
                 continue
             similarity = self.cosine_similarity(query_vec, entry['vector'])
             if similarity >= self.similarity_threshold:
                 logger.info(f"Cache hit! Similarity: {similarity:.4f}")
+                if found_expired:
+                    self._evict_expired()
                 return entry['result']
-        
+
+        if found_expired:
+            self._evict_expired()
         return None
     
     def put(self, query: str, result: str) -> None:
@@ -477,23 +486,27 @@ class SemanticCache:
 
         Args:
             max_age_hours: Maximum age of a cache entry in hours.
-                Must be a positive number, or ``None`` to disable TTL.
+                Must be a positive finite number, or ``None`` to disable TTL.
+                Booleans, strings, NaN, and infinite values are rejected.
 
         Returns:
             Number of expired entries that were evicted (always 0 when
             disabling TTL).
 
         Raises:
-            ValueError: If *max_age_hours* is not a positive number
-                (and is not ``None``).
+            ValueError: If *max_age_hours* is not a positive finite number
+                (and is not ``None``), or is a non-numeric type.
         """
         if max_age_hours is None:
             self.max_age_seconds = None
             logger.info("Cache expiration disabled")
             return 0
 
-        if max_age_hours <= 0:
-            raise ValueError("max_age_hours must be a positive number")
+        if not isinstance(max_age_hours, (int, float)) or isinstance(max_age_hours, bool):
+            raise ValueError("max_age_hours must be a positive finite number or None")
+
+        if not math.isfinite(max_age_hours) or max_age_hours <= 0:
+            raise ValueError("max_age_hours must be a positive finite number")
 
         self.max_age_seconds = max_age_hours * 3600.0
         evicted = self._evict_expired()
