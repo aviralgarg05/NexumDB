@@ -266,6 +266,16 @@ class TestSemanticCacheTTL:
         assert removed == 2  # entries at 3h and 4h ago
         assert len(cache.cache) == 3
 
+    def test_disable_ttl_with_none(self):
+        """Passing None to set_cache_expiration disables TTL."""
+        cache = SemanticCache()
+        cache.set_cache_expiration(1)
+        assert cache.max_age_seconds is not None
+
+        result = cache.set_cache_expiration(None)
+        assert cache.max_age_seconds is None
+        assert result == 0  # no eviction when disabling
+
 
 class TestQueryOptimizer:
     """Test suite for QueryOptimizer class"""

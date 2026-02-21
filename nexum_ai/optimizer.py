@@ -463,24 +463,34 @@ class SemanticCache:
             'top_matches': cache_analysis[:5]  # Top 5 similar cached queries
         }
     
-    def set_cache_expiration(self, max_age_hours: float = 24) -> int:
-        """Set TTL and immediately evict cache entries older than *max_age_hours*.
+    def set_cache_expiration(self, max_age_hours: Optional[float] = 24) -> int:
+        """Set or disable TTL and immediately evict stale cache entries.
 
         After calling this method every subsequent :meth:`get` call will
         transparently skip entries that have exceeded the TTL, and every
         :meth:`save_cache` / :meth:`save_cache_json` call will persist the
         TTL setting so it survives restarts.
 
+        Pass ``None`` to disable TTL entirely (all entries are kept
+        regardless of age).
+
         Args:
             max_age_hours: Maximum age of a cache entry in hours.
-                Must be a positive number.
+                Must be a positive number, or ``None`` to disable TTL.
 
         Returns:
-            Number of expired entries that were evicted.
+            Number of expired entries that were evicted (always 0 when
+            disabling TTL).
 
         Raises:
-            ValueError: If *max_age_hours* is not positive.
+            ValueError: If *max_age_hours* is not a positive number
+                (and is not ``None``).
         """
+        if max_age_hours is None:
+            self.max_age_seconds = None
+            logger.info("Cache expiration disabled")
+            return 0
+
         if max_age_hours <= 0:
             raise ValueError("max_age_hours must be a positive number")
 
