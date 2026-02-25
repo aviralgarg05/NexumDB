@@ -5,6 +5,17 @@ All notable changes to NexumDB will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0](https://github.com/aviralgarg05/NexumDB/compare/v0.6.0...v0.7.0) (2026-02-25)
+
+
+### Features
+
+* add EXPLAIN query plan command ([#131](https://github.com/aviralgarg05/NexumDB/issues/131)) ([33e6094](https://github.com/aviralgarg05/NexumDB/commit/33e60941f0c1ef051d29532f4401fae4e47daec4))
+* add transaction support (BEGIN/COMMIT/ROLLBACK) with WAL recovery ([#137](https://github.com/aviralgarg05/NexumDB/issues/137)) ([1713219](https://github.com/aviralgarg05/NexumDB/commit/17132193cbd9355392b53caa691801e40d2e1ef6))
+* **cli:** add colorized output and improved formatting ([#101](https://github.com/aviralgarg05/NexumDB/issues/101)) ([ab7e2a1](https://github.com/aviralgarg05/NexumDB/commit/ab7e2a1e9a97f86b37fa8e12805a644bc4c74a02))
+* implement TTL ([#139](https://github.com/aviralgarg05/NexumDB/issues/139)) ([b6f45fe](https://github.com/aviralgarg05/NexumDB/commit/b6f45fe89b0bea36673e76a793ae9dab8cd8693c))
+* **storage:** improve error messages with actionable suggestions ([#102](https://github.com/aviralgarg05/NexumDB/issues/102)) ([c8b9251](https://github.com/aviralgarg05/NexumDB/commit/c8b9251bde293b894234a415d87a02a7050b513b))
+
 ## [Unreleased]
 
 ### Notes
