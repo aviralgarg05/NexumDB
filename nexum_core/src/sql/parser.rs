@@ -132,24 +132,7 @@ impl Parser {
                     let projection = select
                         .projection
                         .iter()
-                        .map(|proj| match proj {
-                            ast::SelectItem::Wildcard(_) => Ok(SelectItem::Wildcard),
-                            ast::SelectItem::UnnamedExpr(expr) => match expr {
-                                Expr::Identifier(ident) => Ok(SelectItem::Column {
-                                    name: ident.value.clone(),
-                                    alias: None,
-                                }),
-                                _ => Err(anyhow!("Unsupported select expression: {}", expr)),
-                            },
-                            ast::SelectItem::ExprWithAlias { expr, alias } => match expr {
-                                Expr::Identifier(ident) => Ok(SelectItem::Column {
-                                    name: ident.value.clone(),
-                                    alias: Some(alias.value.clone()),
-                                }),
-                                _ => Err(anyhow!("Unsupported select expression: {}", expr)),
-                            },
-                            _ => Err(anyhow!("Unsupported select item")),
-                        })
+                        .map(Self::convert_select_item)
                         .collect::<Result<Vec<_>>>()?;
 
                     let where_clause = select.selection.as_ref().map(|expr| Box::new(expr.clone()));
@@ -198,6 +181,71 @@ impl Parser {
                 }
             }
             _ => Err(anyhow!("Unsupported statement type")),
+        }
+    }
+
+    fn convert_select_item(item: &ast::SelectItem) -> Result<SelectItem> {
+        match item {
+            ast::SelectItem::Wildcard(_) => Ok(SelectItem::Wildcard),
+            ast::SelectItem::UnnamedExpr(expr) => Self::convert_expr_to_selection(expr, None),
+            ast::SelectItem::ExprWithAlias { expr, alias } => {
+                Self::convert_expr_to_selection(expr, Some(alias.value.clone()))
+            }
+            _ => Err(anyhow!("Unsupported select item")),
+        }
+    }
+
+    fn convert_expr_to_selection(expr: &Expr, alias: Option<String>) -> Result<SelectItem> {
+        match expr {
+            Expr::Identifier(ident) => Ok(SelectItem::Column {
+                name: ident.value.clone(),
+                alias,
+            }),
+            Expr::Function(func) => {
+                let name = func.name.to_string().to_uppercase();
+                let args = &func.args;
+
+                let agg_type = match name.as_str() {
+                    "COUNT" => crate::sql::types::AggregateType::Count,
+                    "SUM" => crate::sql::types::AggregateType::Sum,
+                    "AVG" => crate::sql::types::AggregateType::Avg,
+                    "MIN" => crate::sql::types::AggregateType::Min,
+                    "MAX" => crate::sql::types::AggregateType::Max,
+                    _ => return Err(anyhow!("Unsupported function: {}", name)),
+                };
+
+                if name == "COUNT" {
+                    if args.len() == 1 {
+                        if let ast::FunctionArg::Unnamed(ast::FunctionArgExpr::Wildcard) = &args[0] {
+                            return Ok(SelectItem::Aggregate {
+                                func: agg_type,
+                                column: None,
+                                alias,
+                            });
+                        }
+                    } else if args.is_empty() {
+                         // COUNT() without args is usually invalid but let's stick to valid SQL
+                         return Err(anyhow!("COUNT requires an argument"));
+                    }
+                }
+
+                if args.len() != 1 {
+                    return Err(anyhow!("Aggregate functions expect exactly one argument"));
+                }
+
+                if let ast::FunctionArg::Unnamed(ast::FunctionArgExpr::Expr(Expr::Identifier(ident))) =
+                    &args[0]
+                {
+                    Ok(SelectItem::Aggregate {
+                        func: agg_type,
+                        column: Some(ident.value.clone()),
+                        alias,
+                    })
+                } else {
+                    Err(anyhow!("Unsupported aggregate argument"))
+                }
+            }
+            _ => Err(anyhow!("Unsupported select expression: {}", expr)),
         }
     }
 

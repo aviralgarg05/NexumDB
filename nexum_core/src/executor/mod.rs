@@ -145,6 +145,8 @@ impl Executor {
                 let (projection_indices, output_columns) =
                     Self::build_projection(&schema, &projection)?;
 
+                let is_aggregate = projection.iter().any(|item| matches!(item, SelectItem::Aggregate { .. }));
+
                 let cache_key = Self::build_cache_key(
                     &table,
                     &projection,
@@ -227,6 +229,20 @@ impl Executor {
                 if let Some(limit_count) = limit {
                     rows.truncate(limit_count);
                     log::debug!("Limited to {} rows using LIMIT", limit_count);
+                }
+
+                if is_aggregate {
+                     if order_by.is_some() {
+                        return Err(StorageError::ReadError(
+                            "ORDER BY with aggregates not supported yet".to_string(),
+                        ));
+                    }
+                    if limit.is_some() {
+                         return Err(StorageError::ReadError(
+                            "LIMIT with aggregates not supported yet".to_string(),
+                        ));
+                    }
+                    return self.execute_aggregate(&schema, rows, &projection);
                 }
 
                 let projected_rows: Vec<Row> = rows
@@ -1006,6 +1022,204 @@ impl Executor {
                 .map_err(|e| StorageError::ReadError(e.to_string()))
         } else {
             Ok("No semantic cache enabled".to_string())
+        }
+    }
+
+    fn resolve_column_index(schema: &crate::sql::types::TableSchema, col_name: &str) -> Result<usize> {
+        schema
+            .columns
+            .iter()
+            .position(|c| c.name == *col_name)
+            .ok_or_else(|| {
+                StorageError::ReadError(format!(
+                    "Column {} not found",
+                    col_name
+                ))
+            })
+    }
+
+    fn execute_aggregate(
+        &self,
+        schema: &crate::sql::types::TableSchema,
+        rows: Vec<Row>,
+        projection: &[SelectItem],
+    ) -> Result<ExecutionResult> {
+        let mut result_row = Vec::new();
+        let mut output_columns = Vec::new();
+
+        for item in projection {
+            match item {
+                SelectItem::Aggregate {
+                    func,
+                    column,
+                    alias,
+                } => {
+                    let value = match func {
+                        crate::sql::types::AggregateType::Count => {
+                            if column.is_none() {
+                                // COUNT(*)
+                                Value::Integer(rows.len() as i64)
+                            } else {
+                                // COUNT(column) - distinct non-null values? Standard SQL is count non-null.
+                                let col_name = column.as_ref().unwrap();
+                                let col_idx = Self::resolve_column_index(schema, col_name)?;
+
+                                let count = rows
+                                    .iter()
+                                    .filter(|r| !matches!(r.values[col_idx], Value::Null))
+                                    .count();
+                                Value::Integer(count as i64)
+                            }
+                        }
+                        crate::sql::types::AggregateType::Sum => {
+                            if let Some(col_name) = column {
+                                let col_idx = Self::resolve_column_index(schema, col_name)?;
+
+                                let mut sum_int = 0i64;
+                                let mut sum_float = 0.0f64;
+                                let mut is_float = false;
+
+                                for row in &rows {
+                                    match &row.values[col_idx] {
+                                        Value::Integer(i) => sum_int += i,
+                                        Value::Float(f) => {
+                                            is_float = true;
+                                            sum_float += f;
+                                        }
+                                        Value::Null => continue,
+                                        _ => {
+                                            return Err(StorageError::ReadError(
+                                                "SUM requires numeric column".to_string(),
+                                            ))
+                                        }
+                                    }
+                                }
+
+                                if is_float {
+                                    Value::Float(sum_float + sum_int as f64)
+                                } else {
+                                    Value::Integer(sum_int)
+                                }
+                            } else {
+                                return Err(StorageError::ReadError(
+                                    "SUM requires a column".to_string(),
+                                ));
+                            }
+                        }
+                        crate::sql::types::AggregateType::Avg => {
+                             if let Some(col_name) = column {
+                                let col_idx = Self::resolve_column_index(schema, col_name)?;
+
+                                let mut sum = 0.0f64;
+                                let mut count = 0;
+
+                                for row in &rows {
+                                    match &row.values[col_idx] {
+                                        Value::Integer(i) => {
+                                            sum += *i as f64;
+                                            count += 1;
+                                        },
+                                        Value::Float(f) => {
+                                            sum += f;
+                                            count += 1;
+                                        }
+                                        Value::Null => continue,
+                                        _ => {
+                                            return Err(StorageError::ReadError(
+                                                "AVG requires numeric column".to_string(),
+                                            ))
+                                        }
+                                    }
+                                }
+
+                                if count == 0 {
+                                    Value::Null
+                                } else {
+                                    Value::Float(sum / count as f64)
+                                }
+                            } else {
+                                return Err(StorageError::ReadError(
+                                    "AVG requires a column".to_string(),
+                                ));
+                            }
+                        }
+                        crate::sql::types::AggregateType::Min => {
+                            Self::calculate_min_max(schema, &rows, column, true)?
+                        }
+                        crate::sql::types::AggregateType::Max => {
+                            Self::calculate_min_max(schema, &rows, column, false)?
+                        }
+                    };
+                    
+                    let col_name = alias.clone().unwrap_or_else(|| {
+                         match func {
+                            crate::sql::types::AggregateType::Count => "count".to_string(),
+                            crate::sql::types::AggregateType::Sum => "sum".to_string(),
+                            crate::sql::types::AggregateType::Avg => "avg".to_string(),
+                            crate::sql::types::AggregateType::Min => "min".to_string(),
+                            crate::sql::types::AggregateType::Max => "max".to_string(),
+                        }
+                    });
+                    
+                    output_columns.push(col_name);
+                    result_row.push(value);
+                }
+                _ => return Err(StorageError::ReadError(
+                    "Mixing aggregates and non-aggregates not supported yet".to_string(),
+                )),
+            }
+        }
+
+        Ok(ExecutionResult::Selected {
+            columns: output_columns,
+            rows: vec![Row { values: result_row }],
+        })
+    }
+
+    fn calculate_min_max(schema: &crate::sql::types::TableSchema, rows: &[Row], column: &Option<String>, is_min: bool) -> Result<Value> {
+         if let Some(col_name) = column {
+            let col_idx = Self::resolve_column_index(schema, col_name)?;
+
+            let mut current: Option<Value> = None;
+
+            for row in rows {
+                let val = &row.values[col_idx];
+                if matches!(val, Value::Null) {
+                    continue;
+                }
+                
+                if current.is_none() {
+                    current = Some(val.clone());
+                    continue;
+                }
+
+                let curr_val = current.as_ref().unwrap();
+                
+                let should_replace = match (curr_val, val) {
+                    (Value::Integer(c), Value::Integer(v)) => if is_min { v < c } else { v > c },
+                    (Value::Float(c), Value::Float(v)) => if is_min { v < c } else { v > c },
+                    (Value::Text(c), Value::Text(v)) => if is_min { v < c } else { v > c }, // Text comparison
+                    (Value::Integer(c), Value::Float(v)) => {
+                        let cf = *c as f64;
+                        if is_min { *v < cf } else { *v > cf }
+                    },
+                    (Value::Float(c), Value::Integer(v)) => {
+                        let vf = *v as f64;
+                        if is_min { vf < *c } else { vf > *c }
+                    },
+                    _ => false // Mixed types or unsupported
+                };
+                
+                if should_replace {
+                    current = Some(val.clone());
+                }
+            }
+
+            Ok(current.unwrap_or(Value::Null))
+        } else {
+             Err(StorageError::ReadError(
+                "MIN/MAX requires a column".to_string(),
+            ))
         }
     }
 }
