@@ -45,6 +45,33 @@ An innovative, open-source database that combines traditional SQL with AI-powere
 - Persistent storage with sled
 - Query performance instrumentation
 
+## SQL Support Matrix
+
+| Feature | Status | Since | Notes |
+|---------|--------|-------|-------|
+| `CREATE TABLE` | ✅ Implemented | v0.1.0 | Column types: INTEGER, TEXT |
+| `INSERT INTO` | ✅ Implemented | v0.1.0 | Multi-row, schema-validated (v0.4.0) |
+| `SELECT` (projection) | ✅ Implemented | v0.1.0 | `*`, columns, aliases (`AS`) |
+| `WHERE` (comparison) | ✅ Implemented | v0.2.0 | `=`, `>`, `<`, `>=`, `<=`, `!=` |
+| `WHERE` (logical) | ✅ Implemented | v0.2.0 | `AND`, `OR` |
+| `WHERE` (`LIKE`) | ✅ Implemented | v0.3.0 | `%` and `_` wildcards, `NOT LIKE` |
+| `WHERE` (`IN`) | ✅ Implemented | v0.3.0 | List membership, `NOT IN` |
+| `WHERE` (`BETWEEN`) | ✅ Implemented | v0.3.0 | Range queries, `NOT BETWEEN` |
+| `ORDER BY` | ✅ Implemented | v0.3.0 | Multi-column, `ASC`/`DESC` |
+| `LIMIT` | ✅ Implemented | v0.3.0 | Result truncation |
+| `UPDATE` | ✅ Implemented | v0.4.0 | Schema-validated writes |
+| `DELETE` | ✅ Implemented | v0.4.0 | With `WHERE` filtering |
+| `SHOW TABLES` | ✅ Implemented | v0.4.0 | List all tables |
+| `DESCRIBE` | ✅ Implemented | v0.4.0 | Show table schema |
+| `DROP TABLE` | ✅ Implemented | v0.4.0 | Supports `IF EXISTS` |
+| `ASK` (NL queries) | ✅ Implemented | v0.2.0 | Natural language → SQL |
+| `JOIN` | 📋 Planned | [v0.6.0](ROADMAP.md) | INNER, LEFT, RIGHT, FULL |
+| Subqueries | 📋 Planned | [v0.6.0](ROADMAP.md) | Nested SELECT |
+| `DISTINCT` | 📋 Planned | [v0.6.0](ROADMAP.md) | Deduplicate results |
+| Aggregates | 📋 Planned | [v0.6.0](ROADMAP.md) | SUM, AVG, COUNT, MIN, MAX |
+| `GROUP BY` / `HAVING` | 📋 Planned | [v0.6.0](ROADMAP.md) | Grouped aggregations |
+| `UNION` / `INTERSECT` / `EXCEPT` | 📋 Planned | [v0.6.0](ROADMAP.md) | Set operations |
+
 ## Project Structure
 
 ```
