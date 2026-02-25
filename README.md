@@ -47,8 +47,8 @@ An innovative, open-source database that combines traditional SQL with AI-powere
 
 ## SQL Support Matrix
 
-| Feature | Status | Since | Notes |
-|---------|--------|-------|-------|
+| Feature | Status | Version | Notes |
+|---------|--------|---------|-------|
 | `CREATE TABLE` | ✅ Implemented | v0.1.0 | Column types: INTEGER, TEXT |
 | `INSERT INTO` | ✅ Implemented | v0.1.0 | Multi-row, schema-validated (v0.4.0) |
 | `SELECT` (projection) | ✅ Implemented | v0.1.0 | `*`, columns, aliases (`AS`) |
