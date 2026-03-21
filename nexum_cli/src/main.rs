@@ -58,11 +58,51 @@ struct Args {
 
 /// SQL keywords for auto-completion.
 const SQL_KEYWORDS: &[&str] = &[
-    "SELECT", "INSERT", "INTO", "VALUES", "CREATE", "TABLE", "DROP", "DELETE", "FROM", "WHERE",
-    "UPDATE", "SET", "AND", "OR", "NOT", "ORDER", "BY", "ASC", "DESC", "LIMIT", "LIKE", "IN",
-    "BETWEEN", "JOIN", "ON", "GROUP", "HAVING", "DISTINCT", "AS", "NULL", "INTEGER", "FLOAT",
-    "TEXT", "BOOLEAN", "BEGIN", "COMMIT", "ROLLBACK", "SHOW", "TABLES", "DESCRIBE", "IF",
-    "EXISTS", "EXPLAIN", "ASK", "TRANSACTION",
+    "SELECT",
+    "INSERT",
+    "INTO",
+    "VALUES",
+    "CREATE",
+    "TABLE",
+    "DROP",
+    "DELETE",
+    "FROM",
+    "WHERE",
+    "UPDATE",
+    "SET",
+    "AND",
+    "OR",
+    "NOT",
+    "ORDER",
+    "BY",
+    "ASC",
+    "DESC",
+    "LIMIT",
+    "LIKE",
+    "IN",
+    "BETWEEN",
+    "JOIN",
+    "ON",
+    "GROUP",
+    "HAVING",
+    "DISTINCT",
+    "AS",
+    "NULL",
+    "INTEGER",
+    "FLOAT",
+    "TEXT",
+    "BOOLEAN",
+    "BEGIN",
+    "COMMIT",
+    "ROLLBACK",
+    "SHOW",
+    "TABLES",
+    "DESCRIBE",
+    "IF",
+    "EXISTS",
+    "EXPLAIN",
+    "ASK",
+    "TRANSACTION",
 ];
 
 /// Rustyline helper that provides tab-completion for SQL keywords,
@@ -259,16 +299,11 @@ fn main() -> anyhow::Result<()> {
                     if let Some(ref translator) = nl_translator {
                         let schema = get_schema_context(&catalog);
 
-                        let spinner =
-                            create_spinner(&format!("Translating: '{}'", natural_query));
+                        let spinner = create_spinner(&format!("Translating: '{}'", natural_query));
                         match translator.translate(natural_query, &schema) {
                             Ok(sql) => {
                                 spinner.finish_and_clear();
-                                println!(
-                                    "{} {}",
-                                    "Generated SQL:".cyan().bold(),
-                                    sql.white()
-                                );
+                                println!("{} {}", "Generated SQL:".cyan().bold(), sql.white());
                                 println!();
 
                                 match SqlParser::parse(&sql) {
