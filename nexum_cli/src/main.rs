@@ -382,7 +382,7 @@ fn main() -> anyhow::Result<()> {
         let _ = editor.save_history(path);
     }
 
-    Ok()
+    Ok(())
 }
 
 fn print_banner() {
