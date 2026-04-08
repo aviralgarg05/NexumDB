@@ -94,116 +94,11 @@ impl StorageError {
         }
     }
 
-    // Create a user-friendly OpenError with context-aware suggestions.
-    //
-    // # Arguments
-    //
-    // * `reason` - The underlying error message
-    //
-    // # Returns
-    //
-    // A `StorageError::OpenError` with helpful suggestions based on the error.
-    //
-    // # Example
-    //
-    // ```ignore
-    // use nexum_core::storage::StorageError;
-    // let err = StorageError::open_error("Permission denied".to_string());
-    // ```
-    // #[allow(non_snake_case)]
-    // pub fn OpenError(reason: String) -> Self {
-    //    Self::open_error(reason)
-    // }
-
-    // Create a user-friendly WriteError with context-aware suggestions.
-    //
-    // # Arguments
-    //
-    // * `reason` - The underlying error message
-    //
-    // # Returns
-    //
-    // A `StorageError::WriteError` with helpful suggestions based on the error.
-    //
-    // # Example
-    //
-    // ```ignore
-    // use nexum_core::storage::StorageError;
-    // let err = StorageError::write_error("Disk full");
-    // ```
-    // #[allow(non_snake_case)]
-    // pub fn WriteError(reason: String) -> Self {
-    //     Self::write_error(reason)
-    // }
-
-    // Create a user-friendly ReadError with context-aware suggestions.
-    //
-    // # Arguments
-    //
-    // * `reason` - The underlying error message
-    //
-    // # Returns
-    //
-    // A `StorageError::ReadError` with helpful suggestions based on the error.
-    //
-    // # Example
-    //
-    // ```ignore
-    // use nexum_core::storage::StorageError;
-    // let err = StorageError::read_error("Table not found");
-    // ```
-    // #[allow(non_snake_case)]
-    // pub fn ReadError(reason: String) -> Self {
-    //     Self::read_error(reason)
-    // }
-
-    // Create a user-friendly KeyNotFound error.
-    //
-    // # Arguments
-    //
-    // * `key` - The key that was not found
-    //
-    // # Returns
-    //
-    // A `StorageError::KeyNotFound` with suggestions.
-    //
-    // # Example
-    //
-    // ```ignore
-    // use nexum_core::storage::StorageError;
-    // let err = StorageError::key_not_found("users");
-    // ```
-    // #[allow(non_snake_case)]
-    // pub fn KeyNotFound(key: String) -> Self {
-    //     Self::key_not_found(key, "Key lookup failed", vec![])
-    // }
-
-    // Create a user-friendly SerializationError.
-    //
-    // # Arguments
-    //
-    // * `reason` - The underlying error message
-    //
-    // # Returns
-    //
-    // A `StorageError::SerializationError` with helpful suggestions.
-    //
-    // # Example
-    //
-    // ```ignore
-    // use nexum_core::storage::StorageError;
-    // let err = StorageError::serialization_error("Invalid JSON".to_string());
-    // ```
-    // #[allow(non_snake_case)]
-    // pub fn SerializationError(reason: String) -> Self {
-    //     Self::serialization_error(reason, "")
-    // }
-
     // Internal helper to create OpenError with context-aware suggestions.
     fn open_error(reason: impl Into<String>) -> Self {
         let reason = reason.into();
         let reason_lower = reason.to_lowercase();
-        let suggestion = if reason_lower.contains("Permission denied") {
+        let suggestion = if reason_lower.contains("permission denied") {
             "Check file permissions or run with appropriate privileges".to_string()
         } else if reason.contains("No space left") {
             "Free up disk space or change the database path".to_string()

@@ -12,6 +12,9 @@ pub enum BridgeError {
     #[error("Python bridge not initialized")]
     NotInitialized,
 
+    #[error("Python interpreter not available")]
+    InterpreterUnavailable,
+
     #[error("Python operation failed: {0}")]
     PythonError(String),
 
@@ -28,6 +31,7 @@ impl BridgeError {
     pub fn code(&self) -> ErrorCode {
         match self {
             BridgeError::NotInitialized => ErrorCode::BridgeNotInitialized,
+            BridgeError::InterpreterUnavailable => ErrorCode::BridgeNotInitialized,
             BridgeError::PythonError(_) => ErrorCode::BridgePythonError,
             BridgeError::DirectoryError => ErrorCode::BridgeDirectoryError,
             BridgeError::InvalidPath => ErrorCode::BridgeInvalidPath,

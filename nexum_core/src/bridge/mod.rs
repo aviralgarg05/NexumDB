@@ -13,7 +13,7 @@ where
     F: FnOnce(Python<'_>) -> PyResult<T>,
 {
     Python::try_attach(f)
-        .ok_or(BridgeError::NotInitialized)?
+        .ok_or(BridgeError::InterpreterUnavailable)?
         .map_err(|e: PyErr| BridgeError::PythonError(e.to_string()))
 }
 

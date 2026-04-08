@@ -492,9 +492,6 @@ impl Executor {
                     // Serialize all rows first, fail early if any serialization fails
                     for (key, row) in updates {
                         let value = serde_json::to_vec(&row)?;
-                        // .map_err(|e| {
-                        //     serde_json::to_vec(&row)?;
-                        // })?;
                         batch_operations.push((key, value));
                     }
 
@@ -642,8 +639,8 @@ impl Executor {
         }
 
         let bytes = fs::read(path).map_err(|e| StorageError::read(e.to_string()))?;
-        let wal: TxWalFile =
-            serde_json::from_slice(&bytes).map_err(|e| StorageError::read(e.to_string()))?;
+        let wal: TxWalFile = serde_json::from_slice(&bytes)?;
+        //.map_err(|e| StorageError::read(e.to_string()))?;
         Ok(Some(wal))
     }
 
@@ -656,7 +653,8 @@ impl Executor {
             fs::create_dir_all(parent).map_err(|e| StorageError::write(e.to_string()))?;
         }
 
-        let data = serde_json::to_vec(wal).map_err(|e| StorageError::write(e.to_string()))?;
+        let data = serde_json::to_vec(wal)?;
+        //.map_err(|e| StorageError::write(e.to_string()))?;
         let mut file = File::create(path).map_err(|e| StorageError::write(e.to_string()))?;
         file.write_all(&data)
             .map_err(|e| StorageError::write(e.to_string()))?;
