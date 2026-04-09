@@ -15,6 +15,8 @@ pub enum ErrorCode {
     NxmStor104,
     /// Serialization failure
     NxmStor105,
+    /// Serialization failure
+    NxmStor106,
 }
 
 impl fmt::Display for ErrorCode {
@@ -25,6 +27,7 @@ impl fmt::Display for ErrorCode {
             ErrorCode::NxmStor103 => write!(f, "NXM-STOR-103"),
             ErrorCode::NxmStor104 => write!(f, "NXM-STOR-104"),
             ErrorCode::NxmStor105 => write!(f, "NXM-STOR-105"),
+            ErrorCode::NxmStor106 => write!(f, "NXM-STOR-106"),
         }
     }
 }
@@ -90,7 +93,7 @@ impl StorageError {
             StorageError::ReadError { code, .. } => *code,
             StorageError::KeyNotFound { code, .. } => *code,
             StorageError::SerializationError { code, .. } => *code,
-            StorageError::FilterError(_) => ErrorCode::NxmStor103,
+            StorageError::FilterError(_) => ErrorCode::NxmStor106,
         }
     }
 

@@ -213,7 +213,7 @@ impl Executor {
                             .iter()
                             .position(|c| c == &order_clause.column)
                             .ok_or_else(|| StorageError::ReadError {
-                                code: ErrorCode::NxmStor102,
+                                code: ErrorCode::NxmStor103,
                                 reason: format!(
                                     "Column {} not found in table {}",
                                     order_clause.column, table
@@ -430,7 +430,7 @@ impl Executor {
                             .iter()
                             .position(|c| c == col_name)
                             .ok_or_else(|| StorageError::ReadError {
-                                code: ErrorCode::NxmStor102,
+                                code: ErrorCode::NxmStor103,
                                 reason: format!("Column {} not found in table {}", col_name, table),
                                 suggestion: "Verify the column name exists in the table schema"
                                     .to_string(),
@@ -455,12 +455,9 @@ impl Executor {
                         let should_update = if let Some(ref where_expr) = where_clause {
                             match evaluator.evaluate(where_expr, &row.values) {
                                 Ok(result) => result,
-                                Err(e) => {
-                                    return Err(StorageError::read(format!(
-                                        "WHERE clause evaluation failed: {}. No rows were updated.",
-                                        e
-                                    )));
-                                }
+
+                                Err(e) => return  Err(e.into()),
+
                             }
                         } else {
                             true // No WHERE clause means update all rows

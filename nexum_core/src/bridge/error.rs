@@ -3,6 +3,7 @@ use thiserror::Error;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorCode {
     BridgeNotInitialized,
+    BridgeInterpreterUnavailable,
     BridgePythonError,
     BridgeDirectoryError,
     BridgeInvalidPath,
@@ -31,7 +32,7 @@ impl BridgeError {
     pub fn code(&self) -> ErrorCode {
         match self {
             BridgeError::NotInitialized => ErrorCode::BridgeNotInitialized,
-            BridgeError::InterpreterUnavailable => ErrorCode::BridgeNotInitialized,
+            BridgeError::InterpreterUnavailable => ErrorCode::BridgeInterpreterUnavailable,
             BridgeError::PythonError(_) => ErrorCode::BridgePythonError,
             BridgeError::DirectoryError => ErrorCode::BridgeDirectoryError,
             BridgeError::InvalidPath => ErrorCode::BridgeInvalidPath,
