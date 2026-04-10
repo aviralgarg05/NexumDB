@@ -456,8 +456,7 @@ impl Executor {
                             match evaluator.evaluate(where_expr, &row.values) {
                                 Ok(result) => result,
 
-                                Err(e) => return  Err(e.into()),
-
+                                Err(e) => return Err(e.into()),
                             }
                         } else {
                             true // No WHERE clause means update all rows
