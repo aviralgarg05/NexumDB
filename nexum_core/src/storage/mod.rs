@@ -1,5 +1,5 @@
 mod engine;
-mod error;
+pub mod error;
 
 pub use engine::StorageEngine;
 pub use error::{find_similar_keys, StorageError};
