@@ -77,7 +77,19 @@ impl ExpressionEvaluator {
                 expr,
                 pattern,
                 escape_char,
-            } => self.evaluate_like(*negated, expr, pattern, escape_char.as_ref(), row_values),
+                any: _,
+            } => {
+                let ec_char = escape_char.as_ref().and_then(|ec_val| {
+                    if let sqlparser::ast::Value::SingleQuotedString(s) = ec_val {
+                        s.chars().next()
+                    } else if let sqlparser::ast::Value::DoubleQuotedString(s) = ec_val {
+                        s.chars().next()
+                    } else {
+                        None
+                    }
+                });
+                self.evaluate_like(*negated, expr, pattern, ec_char.as_ref(), row_values)
+            }
             Expr::InList {
                 expr,
                 list,
@@ -136,7 +148,9 @@ impl ExpressionEvaluator {
                     .ok_or_else(|| anyhow!("Column {} not found", col_name))?;
                 Ok(row_values[idx].clone())
             }
-            Expr::Value(sql_val) => self.convert_sql_value(sql_val),
+            Expr::Value(sqlparser::ast::ValueWithSpan {
+                value: ref sql_val, ..
+            }) => self.convert_sql_value(sql_val),
             _ => Err(anyhow!("Cannot extract value from expression: {:?}", expr)),
         }
     }
