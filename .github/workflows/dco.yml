@@ -15,7 +15,7 @@ jobs:
         # Skip DCO check for dependabot PRs and bots
         if: github.actor != 'dependabot[bot]'
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
               with:
                   fetch-depth: 0
             - name: Check DCO Sign-off (non-blocking)
