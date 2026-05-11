@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.dependencies]
 sled = "0.34"
-sqlparser = "0.61"
+sqlparser = "0.62"
 pyo3 = { version = "0.28", features = ["auto-initialize"] }
 anyhow = "1.0"
 thiserror = "1.0"
