@@ -69,6 +69,10 @@ impl Planner {
                             .as_ref()
                             .map(|a| format!("{} AS {}", name, a))
                             .unwrap_or_else(|| name.clone()),
+                        crate::sql::types::SelectItem::Aggregate { func, column, alias } => {
+                             let col = column.as_deref().unwrap_or("*");
+                             alias.clone().unwrap_or_else(|| format!("{:?}({})", func, col))
+                        }
                     })
                     .collect();
                 Plan::Select { table, columns }
