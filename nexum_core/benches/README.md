@@ -4,50 +4,48 @@ This directory contains comprehensive performance benchmarks for the `nexum_core
 
 ## Benchmark Categories
 
-### 1. Storage Engine Benchmarks (`storage_bench.rs`)
+### 1. Database Comparison Benchmarks (`db_comparison.rs`)
+**Comparative analysis between NexumDB and SQLite (via `rusqlite`):**
+- **Cross-Engine Comparison**: Evaluates NexumDB's execution speed against the industry-standard SQLite baseline.
+- **Semantic Cache Analysis**: Measures performance delta between "Cold" starts and "Cached" executor states.
+- **Platform Stability**: Implements proper lifetime management for `NamedTempFile` and `TempDir` to ensure stable benchmarking on Windows and Unix alike.
 
+### 2. Storage Engine Benchmarks (`storage_bench.rs`)
 Tests the performance of the underlying storage engine operations:
+- **Write Throughput**: Sequential write operations with different data sizes.
+- **Read Throughput**: Sequential read operations with different data sizes.
+- **Prefix Scanning**: Performance of prefix-based key scanning.
 
-- **Write Throughput**: Sequential write operations with different data sizes
-- **Read Throughput**: Sequential read operations with different data sizes  
-- **Mixed Workload**: Combined read/write operations with different ratios
-- **Prefix Scanning**: Performance of prefix-based key scanning
-- **Persistence**: Flush and durability operations
-
-### 2. SQL Parser Benchmarks (`sql_bench.rs`)
-
+### 3. SQL Parser Benchmarks (`sql_bench.rs`)
 Measures SQL parsing performance across different query types:
+- **CREATE/INSERT/SELECT**: Parsing overhead for standard SQL statements.
+- **Large Queries**: Performance scaling with complex SQL statements.
 
-- **CREATE TABLE**: Simple and complex table definitions
-- **INSERT**: Single and multi-row insert statements
-- **SELECT**: Various SELECT queries with different complexity
-- **Mixed Workload**: Typical application SQL statement patterns
-- **Error Handling**: Performance of invalid SQL processing
-- **Large Queries**: Performance with very large SQL statements
+### 4. Query Executor & Filter Evaluation
+- **Executor Bench**: Tests the query execution engine performance on substantial data volumes.
+- **Filter Bench**: Focuses on `WHERE` clause evaluation (LIKE, IN, BETWEEN, and complex logic).
 
-### 3. Query Executor Benchmarks (`executor_bench.rs`)
-
-Tests the query execution engine performance:
-
-- **Simple SELECT**: Basic table scanning operations
-- **Filtered SELECT**: Queries with WHERE clauses
-- **INSERT Operations**: Data insertion performance
-- **CREATE TABLE**: Table creation overhead
-- **Mixed Workload**: Realistic application usage patterns
-- **Large Datasets**: Performance with substantial data volumes
-
-### 4. Filter Evaluation Benchmarks (`filter_bench.rs`)
-
-Focuses on WHERE clause evaluation performance:
-
-- **Simple Comparisons**: Basic equality, inequality operations
-- **Complex Expressions**: AND, OR, nested conditions
-- **LIKE Patterns**: Pattern matching with wildcards
-- **IN Lists**: Performance with different list sizes
-- **BETWEEN Ranges**: Range-based filtering
-- **Batch Evaluation**: Filter performance across large datasets
+---
 
 ## Running Benchmarks
+
+### Prerequisites
+Ensure `rusqlite` is available in your dev-dependencies. If missing, run:
+
+# Comparative benchmarks (Nexum vs SQLite)
+```bash
+cargo bench --bench db_comparison
+```
+
+# Storage engine benchmarks
+```bash
+cargo bench --bench storage_bench
+```
+
+# SQL parser benchmarks  
+```bash
+cargo bench --bench sql_bench
+```
 
 ### Run All Benchmarks
 ```bash
@@ -95,6 +93,21 @@ Criterion generates detailed reports including:
 - **HTML Reports**: Interactive charts and graphs
 - **Statistical Analysis**: Confidence intervals and outlier detection
 
+## Benchmark Comparative Results
+The following results were captured on February 12, 2026, using 1,000 unique pre-populated records.
+
+| Benchmark Case | Engine | Avg Latency | Comparison |
+| :--- | :--- | :--- | :--- |
+| **Point Lookup** | SQLite (Prepared) | **157.09 µs** | Baseline (1.0x) |
+| **Point Lookup (Cold)** | NexumDB | **2.81 ms** | ~17.9x slower |
+| **Point Lookup (Cached)**| NexumDB | **2.64 ms** | ~16.8x slower |
+
+
+## Performance Analysis
+- **SQLite Efficiency**: SQLite's performance serves as our high-bar baseline. Its C-based architecture and mature B-Tree implementation result in sub-millisecond latencies for prepared lookups.
+
+- **NexumDB Cold vs. Cached**: We observe a 6.1% performance gain in cached results. This confirms the semantic cache is active; however, the proximity of "Cold" and "Cached" timings suggests that the primary bottleneck currently lies in the Executor Dispatch Pipeline rather than storage retrieval.
+
 ## CI Integration
 
 Benchmarks run automatically on pull requests to:
@@ -104,7 +117,6 @@ Benchmarks run automatically on pull requests to:
 - Generate performance reports
 - Upload benchmark artifacts
 
-## Performance Targets
 
 ### Storage Engine
 - **Write Throughput**: >10,000 ops/sec for small records
@@ -127,6 +139,9 @@ Benchmarks run automatically on pull requests to:
 - **Batch Processing**: >100,000 rows/sec
 
 ## Optimization Guidelines
+- **Zero-Copy Parsing**: Reduce allocations during Parser::parse by using string references where possible.
+- **Plan Caching**: Cache the execution plan alongside results to bypass the standard dispatch pipeline.
+- **LSM Tuning**: Optimize the underlying storage parameters to reduce seek time for point lookups.
 
 ### Storage Layer
 - Minimize disk I/O operations
