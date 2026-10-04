@@ -1,4 +1,4 @@
-use super::{Result, StorageError};
+use super::Result;
 use sled::Db;
 use std::path::{Path, PathBuf};
 
@@ -11,7 +11,13 @@ pub struct StorageEngine {
 impl StorageEngine {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
         let db_path = path.as_ref().to_path_buf();
-        let db = sled::open(&db_path).map_err(|e| StorageError::OpenError(e.to_string()))?;
+        let db = sled::open(&db_path)?;
+        //.map_err(|e| StorageError::OpenError
+        //     {
+        //     code: ErrorCode::NxmStor101,
+        //     reason: e.to_string(),
+        //     suggestion: "Check database path and permissions".to_string(),
+        // })?;
         let wal_path = db_path
             .parent()
             .map(|parent| parent.join("nexum_tx_wal.json"))
@@ -24,9 +30,12 @@ impl StorageEngine {
 
     pub fn memory() -> Result<Self> {
         let config = sled::Config::new().temporary(true);
-        let db = config
-            .open()
-            .map_err(|e| StorageError::OpenError(e.to_string()))?;
+        let db = config.open()?;
+        // .map_err(|e| StorageError::OpenError{
+        //     code: ErrorCode::NxmStor101,
+        // reason: e.to_string(),
+        // suggestion: "Check database path and permissions".to_string(),
+        // })?;
         Ok(Self { db, wal_path: None })
     }
 

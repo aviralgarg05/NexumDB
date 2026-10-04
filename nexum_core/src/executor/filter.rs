@@ -40,8 +40,8 @@
 //! based on WHERE clause conditions, but is made public to support
 //! benchmarking and testing of filter performance.
 
+use crate::executor::filter_error::{FilterError, Result};
 use crate::sql::types::Value;
-use anyhow::{anyhow, Result};
 use regex::Regex;
 use sqlparser::ast::{BinaryOperator, Expr, Value as SqlValue};
 
@@ -56,6 +56,11 @@ impl ExpressionEvaluator {
 
     pub fn evaluate(&self, expr: &Expr, row_values: &[Value]) -> Result<bool> {
         match expr {
+            Expr::Value(v) => match &v.value {
+                SqlValue::Boolean(b) => Ok(*b),
+                _ => Err(FilterError::ExpectedBoolean),
+            },
+
             Expr::BinaryOp { left, op, right } => {
                 self.evaluate_binary_op(left, op, right, row_values)
             }
@@ -65,19 +70,20 @@ impl ExpressionEvaluator {
                     .column_names
                     .iter()
                     .position(|name| name == col_name)
-                    .ok_or_else(|| anyhow!("Column {} not found", col_name))?;
+                    .ok_or_else(|| FilterError::ColumnNotFound(col_name.to_string()))?;
 
                 match &row_values[idx] {
                     Value::Boolean(b) => Ok(*b),
-                    _ => Err(anyhow!("Expected boolean value for identifier")),
+                    _ => Err(FilterError::ExpectedBoolean),
                 }
             }
             Expr::Like {
                 negated,
                 expr,
                 pattern,
-                escape_char,
-            } => self.evaluate_like(*negated, expr, pattern, escape_char.as_ref(), row_values),
+                escape_char: _,
+                ..
+            } => self.evaluate_like(*negated, expr, pattern, None, row_values),
             Expr::InList {
                 expr,
                 list,
@@ -89,7 +95,7 @@ impl ExpressionEvaluator {
                 low,
                 high,
             } => self.evaluate_between(expr, *negated, low, high, row_values),
-            _ => Err(anyhow!("Unsupported expression type: {:?}", expr)),
+            _ => Err(FilterError::UnsupportedExpression),
         }
     }
 
@@ -121,7 +127,7 @@ impl ExpressionEvaluator {
                 let right_val = self.extract_value(right, row_values)?;
                 self.compare_values(&left_val, op, &right_val)
             }
-            _ => Err(anyhow!("Unsupported operator: {:?}", op)),
+            _ => Err(FilterError::UnsupportedOperator(format!("{:?}", op))),
         }
     }
 
@@ -133,11 +139,11 @@ impl ExpressionEvaluator {
                     .column_names
                     .iter()
                     .position(|name| name == col_name)
-                    .ok_or_else(|| anyhow!("Column {} not found", col_name))?;
+                    .ok_or_else(|| FilterError::ColumnNotFound(col_name.to_string()))?;
                 Ok(row_values[idx].clone())
             }
-            Expr::Value(sql_val) => self.convert_sql_value(sql_val),
-            _ => Err(anyhow!("Cannot extract value from expression: {:?}", expr)),
+            Expr::Value(sql_val) => self.convert_sql_value(&sql_val.value),
+            _ => Err(FilterError::ExtractionError(format!("{:?}", expr))),
         }
     }
 
@@ -145,9 +151,15 @@ impl ExpressionEvaluator {
         match sql_val {
             SqlValue::Number(n, _) => {
                 if n.contains('.') {
-                    Ok(Value::Float(n.parse()?))
+                    Ok(Value::Float(
+                        n.parse::<f64>()
+                            .map_err(|e| FilterError::ParseError(e.to_string()))?,
+                    ))
                 } else {
-                    Ok(Value::Integer(n.parse()?))
+                    Ok(Value::Integer(
+                        n.parse::<i64>()
+                            .map_err(|e| FilterError::ParseError(e.to_string()))?,
+                    ))
                 }
             }
             SqlValue::SingleQuotedString(s) | SqlValue::DoubleQuotedString(s) => {
@@ -155,7 +167,7 @@ impl ExpressionEvaluator {
             }
             SqlValue::Boolean(b) => Ok(Value::Boolean(*b)),
             SqlValue::Null => Ok(Value::Null),
-            _ => Err(anyhow!("Unsupported SQL value: {:?}", sql_val)),
+            _ => Err(FilterError::UnsupportedValue),
         }
     }
 
@@ -168,7 +180,11 @@ impl ExpressionEvaluator {
                 BinaryOperator::Lt => l < r,
                 BinaryOperator::GtEq => l >= r,
                 BinaryOperator::LtEq => l <= r,
-                _ => return Err(anyhow!("Invalid operator for integers")),
+                _ => {
+                    return Err(FilterError::UnsupportedOperator(
+                        "integer comparison".into(),
+                    ))
+                }
             }),
             (Value::Float(l), Value::Float(r)) => Ok(match op {
                 BinaryOperator::Eq => (l - r).abs() < f64::EPSILON,
@@ -177,7 +193,7 @@ impl ExpressionEvaluator {
                 BinaryOperator::Lt => l < r,
                 BinaryOperator::GtEq => l >= r,
                 BinaryOperator::LtEq => l <= r,
-                _ => return Err(anyhow!("Invalid operator for floats")),
+                _ => return Err(FilterError::UnsupportedOperator("floats comparison".into())),
             }),
             (Value::Text(l), Value::Text(r)) => Ok(match op {
                 BinaryOperator::Eq => l == r,
@@ -186,22 +202,25 @@ impl ExpressionEvaluator {
                 BinaryOperator::Lt => l < r,
                 BinaryOperator::GtEq => l >= r,
                 BinaryOperator::LtEq => l <= r,
-                _ => return Err(anyhow!("Invalid operator for text")),
+                _ => return Err(FilterError::UnsupportedOperator("text comparison".into())),
             }),
             (Value::Boolean(l), Value::Boolean(r)) => Ok(match op {
                 BinaryOperator::Eq => l == r,
                 BinaryOperator::NotEq => l != r,
-                _ => return Err(anyhow!("Invalid operator for booleans")),
+                _ => {
+                    return Err(FilterError::UnsupportedOperator(
+                        "booleans comparison".into(),
+                    ))
+                }
             }),
             (Value::Null, Value::Null) => Ok(match op {
                 BinaryOperator::Eq => true,
                 BinaryOperator::NotEq => false,
-                _ => return Err(anyhow!("Invalid operator for nulls")),
+                _ => return Err(FilterError::UnsupportedOperator("nulls comparison".into())),
             }),
-            _ => Err(anyhow!(
-                "Type mismatch in comparison: {:?} vs {:?}",
-                left,
-                right
+            _ => Err(FilterError::TypeMismatch(
+                format!("{:?}", left),
+                format!("{:?}", right),
             )),
         }
     }
@@ -221,12 +240,12 @@ impl ExpressionEvaluator {
             let regex_pattern = pat.replace('%', ".*").replace('_', ".");
 
             let regex = Regex::new(&format!("^{}$", regex_pattern))
-                .map_err(|e| anyhow!("Invalid LIKE pattern: {}", e))?;
+                .map_err(|e| FilterError::InvalidLikePattern(e.to_string()))?;
 
             let matches = regex.is_match(&text);
             Ok(if negated { !matches } else { matches })
         } else {
-            Err(anyhow!("LIKE operator requires text values"))
+            Err(FilterError::UnsupportedValue)
         }
     }
 
