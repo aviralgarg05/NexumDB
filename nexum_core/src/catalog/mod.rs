@@ -1,4 +1,5 @@
 use crate::sql::types::{Column, TableSchema};
+use crate::storage::error::ErrorCode;
 use crate::storage::{Result, StorageEngine, StorageError};
 use serde::{Deserialize, Serialize};
 
@@ -23,10 +24,11 @@ impl Catalog {
         let key = Self::table_key(name);
 
         if self.storage.get(&key)?.is_some() {
-            return Err(StorageError::WriteError(format!(
-                "Table {} already exists",
-                name
-            )));
+            return Err(StorageError::WriteError {
+                code: ErrorCode::NxmStor103,
+                reason: format!("Table {} already exists", name),
+                suggestion: "Use a different table name".to_string(),
+            });
         }
 
         let cols: Vec<(String, String)> = columns
