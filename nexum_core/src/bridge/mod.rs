@@ -12,7 +12,7 @@ impl PythonBridge {
     }
 
     pub fn initialize(&mut self) -> Result<()> {
-        Python::with_gil(|py| {
+        Python::attach(|py: pyo3::Python| {
             let sys = py.import("sys")?;
             let path_attr = sys.getattr("path")?;
             let path = path_attr.downcast::<PyList>()?;
@@ -35,7 +35,7 @@ impl PythonBridge {
             return Err(anyhow!("Python bridge not initialized"));
         }
 
-        Python::with_gil(|py| {
+        Python::attach(|py: pyo3::Python| {
             let nexum_ai = PyModule::import(py, "nexum_ai.optimizer")?;
             let semantic_cache = nexum_ai.getattr("SemanticCache")?;
             let cache_instance = semantic_cache.call0()?;
@@ -50,7 +50,7 @@ impl PythonBridge {
     }
 
     pub fn test_integration(&self) -> Result<String> {
-        Python::with_gil(|py| {
+        Python::attach(|py: pyo3::Python| {
             let nexum_ai = PyModule::import(py, "nexum_ai.optimizer")?;
             let test_func = nexum_ai.getattr("test_vectorization")?;
             let result = test_func.call0()?;
@@ -63,7 +63,7 @@ impl PythonBridge {
 
 pub struct SemanticCache {
     bridge: PythonBridge,
-    cache: PyObject,
+    cache: Py<PyAny>,
 }
 
 impl SemanticCache {
@@ -75,18 +75,18 @@ impl SemanticCache {
         let mut bridge = PythonBridge::new()?;
         bridge.initialize()?;
 
-        let cache = Python::with_gil(|py| {
+        let cache = Python::attach(|py: pyo3::Python| {
             let nexum_ai = PyModule::import(py, "nexum_ai.optimizer")?;
             let semantic_cache_class = nexum_ai.getattr("SemanticCache")?;
             let cache_instance = semantic_cache_class.call1((0.95, cache_file))?;
-            Ok::<PyObject, PyErr>(cache_instance.unbind())
+            Ok::<Py<PyAny>, PyErr>(cache_instance.unbind())
         })?;
 
         Ok(Self { bridge, cache })
     }
 
     pub fn get(&self, query: &str) -> Result<Option<String>> {
-        Python::with_gil(|py| {
+        Python::attach(|py: pyo3::Python| {
             let cache_bound = self.cache.bind(py);
             let result = cache_bound.call_method1("get", (query,))?;
 
@@ -101,7 +101,7 @@ impl SemanticCache {
     }
 
     pub fn put(&self, query: &str, result: &str) -> Result<()> {
-        Python::with_gil(|py| {
+        Python::attach(|py: pyo3::Python| {
             let cache_bound = self.cache.bind(py);
             cache_bound.call_method1("put", (query, result))?;
             Ok::<(), PyErr>(())
@@ -114,7 +114,7 @@ impl SemanticCache {
     }
 
     pub fn save_cache(&self) -> Result<()> {
-        Python::with_gil(|py| {
+        Python::attach(|py: pyo3::Python| {
             let cache_bound = self.cache.bind(py);
             cache_bound.call_method0("save_cache")?;
             Ok::<(), PyErr>(())
@@ -123,7 +123,7 @@ impl SemanticCache {
     }
 
     pub fn load_cache(&self) -> Result<()> {
-        Python::with_gil(|py| {
+        Python::attach(|py: pyo3::Python| {
             let cache_bound = self.cache.bind(py);
             cache_bound.call_method0("load_cache")?;
             Ok::<(), PyErr>(())
@@ -132,7 +132,7 @@ impl SemanticCache {
     }
 
     pub fn clear_cache(&self) -> Result<()> {
-        Python::with_gil(|py| {
+        Python::attach(|py: pyo3::Python| {
             let cache_bound = self.cache.bind(py);
             cache_bound.call_method0("clear")?;
             Ok::<(), PyErr>(())
@@ -141,7 +141,7 @@ impl SemanticCache {
     }
 
     pub fn get_cache_stats(&self) -> Result<String> {
-        Python::with_gil(|py| {
+        Python::attach(|py: pyo3::Python| {
             let cache_bound = self.cache.bind(py);
             let result = cache_bound.call_method0("get_cache_stats")?;
             let stats_str: String = result.str()?.extract()?;
@@ -151,7 +151,7 @@ impl SemanticCache {
     }
 
     pub fn explain_query(&self, query: &str) -> Result<String> {
-        Python::with_gil(|py| {
+        Python::attach(|py: pyo3::Python| {
             let cache_bound = self.cache.bind(py);
             let result = cache_bound.call_method1("explain_query", (query,))?;
             let explain_str: String = result.str()?.extract()?;
@@ -163,7 +163,7 @@ impl SemanticCache {
 
 pub struct NLTranslator {
     _bridge: PythonBridge,
-    translator: PyObject,
+    translator: Py<PyAny>,
 }
 
 impl NLTranslator {
@@ -171,11 +171,11 @@ impl NLTranslator {
         let mut bridge = PythonBridge::new()?;
         bridge.initialize()?;
 
-        let translator = Python::with_gil(|py| {
+        let translator = Python::attach(|py: pyo3::Python| {
             let nexum_ai = PyModule::import(py, "nexum_ai.translator")?;
             let translator_class = nexum_ai.getattr("NLTranslator")?;
             let translator_instance = translator_class.call0()?;
-            Ok::<PyObject, PyErr>(translator_instance.unbind())
+            Ok::<Py<PyAny>, PyErr>(translator_instance.unbind())
         })?;
 
         Ok(Self {
@@ -185,7 +185,7 @@ impl NLTranslator {
     }
 
     pub fn translate(&self, natural_query: &str, schema: &str) -> Result<String> {
-        Python::with_gil(|py| {
+        Python::attach(|py: pyo3::Python| {
             let translator_bound = self.translator.bind(py);
             let result = translator_bound.call_method1("translate", (natural_query, schema))?;
 
@@ -208,7 +208,7 @@ impl QueryExplainer {
     }
 
     pub fn explain(&self, query: &str) -> Result<String> {
-        Python::with_gil(|py| {
+        Python::attach(|py: pyo3::Python| {
             let nexum_ai = PyModule::import(py, "nexum_ai.optimizer")?;
             let explain_func = nexum_ai.getattr("explain_query_plan")?;
             let format_func = nexum_ai.getattr("format_explain_output")?;
@@ -222,7 +222,7 @@ impl QueryExplainer {
     }
 
     pub fn explain_raw(&self, query: &str) -> Result<String> {
-        Python::with_gil(|py| {
+        Python::attach(|py: pyo3::Python| {
             let nexum_ai = PyModule::import(py, "nexum_ai.optimizer")?;
             let explain_func = nexum_ai.getattr("explain_query_plan")?;
 
@@ -241,7 +241,9 @@ mod tests {
     fn check_python_available() -> bool {
         let mut bridge = PythonBridge::new().unwrap();
         bridge.initialize().is_ok()
-            && Python::with_gil(|py| PyModule::import(py, "nexum_ai.optimizer").is_ok())
+            && Python::attach(|py: pyo3::Python| {
+                PyModule::import(py, "nexum_ai.optimizer").is_ok()
+            })
     }
 
     #[test]
