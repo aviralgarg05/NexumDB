@@ -1,6 +1,8 @@
 use super::types::{Column, DataType, SelectItem, Statement, Value};
 use anyhow::{anyhow, Result};
-use sqlparser::ast::{self, ColumnDef, DataType as SqlDataType, Expr, Statement as SqlStatement};
+use sqlparser::ast::{
+    self, ColumnDef, DataType as SqlDataType, Expr, OrderByKind, Statement as SqlStatement,
+};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser as SqlParser;
 
@@ -30,9 +32,10 @@ impl Parser {
 
     fn convert_statement(stmt: &SqlStatement) -> Result<Statement> {
         match stmt {
-            SqlStatement::CreateTable { name, columns, .. } => {
-                let table_name = name.to_string();
-                let cols = columns
+            SqlStatement::CreateTable(create) => {
+                let table_name = create.name.to_string();
+                let cols = create
+                    .columns
                     .iter()
                     .map(Self::convert_column)
                     .collect::<Result<Vec<_>>>()?;
@@ -41,14 +44,14 @@ impl Parser {
                     columns: cols,
                 })
             }
-            SqlStatement::Insert {
-                table_name,
-                columns,
-                source,
-                ..
-            } => {
-                let table = table_name.to_string();
-                let col_names = columns.iter().map(|c| c.to_string()).collect();
+            SqlStatement::Insert(insert) => {
+                let table = insert.table.to_string();
+                let col_names = insert.columns.iter().map(|c| c.to_string()).collect();
+
+                let source = insert
+                    .source
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("INSERT missing values"))?;
 
                 let values = if let ast::SetExpr::Values(values) = &*source.body {
                     values
@@ -70,29 +73,24 @@ impl Parser {
                     values,
                 })
             }
-            SqlStatement::Update {
-                table,
-                assignments,
-                selection,
-                ..
-            } => {
-                let table_name = table.to_string();
+            SqlStatement::Update(update) => {
+                let table_name = update.table.to_string();
 
-                let assignment_pairs = assignments
+                let assignment_pairs = update
+                    .assignments
                     .iter()
                     .map(|assign| {
-                        let col_name = assign
-                            .id
-                            .iter()
-                            .map(|i| i.value.clone())
-                            .collect::<Vec<_>>()
-                            .join(".");
+                        let col_name = match &assign.target {
+                            ast::AssignmentTarget::ColumnName(obj) => obj.to_string(),
+                            _ => return Err(anyhow!("Unsupported assignment target")),
+                        };
+
                         let value = Self::convert_expr(&assign.value)?;
                         Ok((col_name, value))
                     })
                     .collect::<Result<Vec<_>>>()?;
 
-                let where_clause = selection.as_ref().map(|expr| Box::new(expr.clone()));
+                let where_clause = update.selection.as_ref().map(|expr| Box::new(expr.clone()));
 
                 Ok(Statement::Update {
                     table: table_name,
@@ -100,16 +98,21 @@ impl Parser {
                     where_clause,
                 })
             }
-            SqlStatement::Delete {
-                from, selection, ..
-            } => {
-                let table = if let Some(from_clause) = from.first() {
-                    from_clause.relation.to_string()
-                } else {
-                    return Err(anyhow!("DELETE requires a table name"));
+            SqlStatement::Delete(delete) => {
+                let table = match &delete.from {
+                    ast::FromTable::WithFromKeyword(tables) => tables
+                        .first()
+                        .ok_or_else(|| anyhow!("DELETE requires table"))?
+                        .relation
+                        .to_string(),
+                    ast::FromTable::WithoutKeyword(table) => table
+                        .first()
+                        .ok_or_else(|| anyhow!("DELETE requires table"))?
+                        .relation
+                        .to_string(),
                 };
 
-                let where_clause = selection.as_ref().map(|expr| Box::new(expr.clone()));
+                let where_clause = delete.selection.as_ref().map(|expr| Box::new(expr.clone()));
 
                 Ok(Statement::Delete {
                     table,
@@ -154,37 +157,61 @@ impl Parser {
 
                     let where_clause = select.selection.as_ref().map(|expr| Box::new(expr.clone()));
 
-                    let order_by = if !query.order_by.is_empty() {
-                        Some(
-                            query
-                                .order_by
-                                .iter()
-                                .map(|order| {
-                                    let column = match &order.expr {
-                                        Expr::Identifier(ident) => ident.value.clone(),
-                                        _ => {
-                                            return Err(anyhow!(
-                                                "Unsupported ORDER BY expression: {}",
-                                                order.expr
-                                            ))
-                                        }
-                                    };
-                                    let ascending = order.asc.unwrap_or(true);
-                                    Ok(crate::sql::types::OrderByClause { column, ascending })
-                                })
-                                .collect::<Result<Vec<_>>>()?,
-                        )
+                    let order_by = if let Some(order_by) = &query.order_by {
+                        if let OrderByKind::Expressions(exprs) = &order_by.kind {
+                            Some(
+                                // order_by
+                                exprs
+                                    .iter()
+                                    .map(|order| {
+                                        let column = match &order.expr {
+                                            Expr::Identifier(ident) => ident.value.clone(),
+                                            _ => {
+                                                return Err(anyhow!(
+                                                    "Unsupported ORDER BY expression:",
+                                                ))
+                                            }
+                                        };
+                                        let ascending = order.options.asc.unwrap_or(true);
+                                        Ok(crate::sql::types::OrderByClause { column, ascending })
+                                    })
+                                    .collect::<Result<Vec<_>>>()?,
+                            )
+                        } else {
+                            None
+                        }
                     } else {
                         None
                     };
 
-                    let limit = query.limit.as_ref().and_then(|limit_expr| {
-                        if let ast::Expr::Value(ast::Value::Number(n, _)) = limit_expr {
-                            n.parse().ok()
-                        } else {
-                            None
+                    let limit = if let Some(limit_clause) = &query.limit_clause {
+                        match limit_clause {
+                            ast::LimitClause::LimitOffset { limit, .. } => {
+                                if let Some(ast::Expr::Value(v)) = limit {
+                                    if let ast::Value::Number(n, _) = &v.value {
+                                        n.parse().ok()
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                }
+                            }
+                            ast::LimitClause::OffsetCommaLimit { limit, .. } => {
+                                if let ast::Expr::Value(v) = limit {
+                                    if let ast::Value::Number(n, _) = &v.value {
+                                        n.parse().ok()
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                }
+                            }
                         }
-                    });
+                    } else {
+                        None
+                    };
 
                     Ok(Statement::Select {
                         table,
@@ -305,7 +332,9 @@ impl Parser {
             SqlDataType::Int(_) | SqlDataType::Integer(_) | SqlDataType::BigInt(_) => {
                 Ok(DataType::Integer)
             }
-            SqlDataType::Float(_) | SqlDataType::Double | SqlDataType::Real => Ok(DataType::Float),
+            SqlDataType::Float(_) | SqlDataType::Double(_) | SqlDataType::Real => {
+                Ok(DataType::Float)
+            }
             SqlDataType::Text
             | SqlDataType::Varchar(_)
             | SqlDataType::Char(_)
@@ -317,22 +346,34 @@ impl Parser {
 
     fn convert_expr(expr: &Expr) -> Result<Value> {
         match expr {
-            Expr::Value(ast::Value::Number(n, _)) => {
-                if n.contains('.') {
-                    Ok(Value::Float(n.parse()?))
-                } else {
-                    Ok(Value::Integer(n.parse()?))
+            Expr::Value(v) => match &v.value {
+                ast::Value::Number(n, _) => {
+                    if n.contains('.') {
+                        Ok(Value::Float(n.parse()?))
+                    } else {
+                        Ok(Value::Integer(n.parse()?))
+                    }
+                }
+
+                ast::Value::SingleQuotedString(s) | ast::Value::DoubleQuotedString(s) => {
+                    Ok(Value::Text(s.clone()))
+                }
+                ast::Value::Boolean(b) => Ok(Value::Boolean(*b)),
+                ast::Value::Null => Ok(Value::Null),
+                _ => Err(anyhow!("Unsupported value")),
+            },
+            Expr::Identifier(ident) => {
+                let v = ident.value.to_lowercase();
+                match v.as_str() {
+                    "true" => Ok(Value::Boolean(true)),
+                    "false" => Ok(Value::Boolean(false)),
+                    _ => Err(anyhow!("Unsupported identifier value: {}", ident.value)),
                 }
             }
-            Expr::Value(ast::Value::SingleQuotedString(s))
-            | Expr::Value(ast::Value::DoubleQuotedString(s)) => Ok(Value::Text(s.clone())),
-            Expr::Value(ast::Value::Boolean(b)) => Ok(Value::Boolean(*b)),
-            Expr::Value(ast::Value::Null) => Ok(Value::Null),
             _ => Err(anyhow!("Unsupported expression: {:?}", expr)),
         }
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

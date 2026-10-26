@@ -1,9 +1,20 @@
-use anyhow::{anyhow, Result};
+pub mod error;
+use crate::bridge::error::{BridgeError, Result};
 use pyo3::prelude::*;
+use pyo3::types::PyAny;
 use pyo3::types::{PyList, PyModule};
+use pyo3::Py;
 
 pub struct PythonBridge {
     initialized: bool,
+}
+fn with_python<F, T>(f: F) -> Result<T>
+where
+    F: FnOnce(Python<'_>) -> PyResult<T>,
+{
+    Python::try_attach(f)
+        .ok_or(BridgeError::InterpreterUnavailable)?
+        .map_err(|e: PyErr| BridgeError::PythonError(e.to_string()))
 }
 
 impl PythonBridge {
@@ -12,10 +23,10 @@ impl PythonBridge {
     }
 
     pub fn initialize(&mut self) -> Result<()> {
-        Python::with_gil(|py| {
+        with_python(|py| {
             let sys = py.import("sys")?;
             let path_attr = sys.getattr("path")?;
-            let path = path_attr.downcast::<PyList>()?;
+            let path = path_attr.cast::<PyList>()?;
 
             let nexum_ai_pathbuf =
                 std::env::current_dir().expect("Failed to get current directory");
@@ -25,17 +36,16 @@ impl PythonBridge {
 
             Ok::<(), PyErr>(())
         })?;
-
         self.initialized = true;
         Ok(())
     }
 
     pub fn vectorize(&self, text: &str) -> Result<Vec<f32>> {
         if !self.initialized {
-            return Err(anyhow!("Python bridge not initialized"));
+            return Err(BridgeError::NotInitialized);
         }
 
-        Python::with_gil(|py| {
+        with_python(|py| {
             let nexum_ai = PyModule::import(py, "nexum_ai.optimizer")?;
             let semantic_cache = nexum_ai.getattr("SemanticCache")?;
             let cache_instance = semantic_cache.call0()?;
@@ -46,24 +56,25 @@ impl PythonBridge {
 
             Ok(vector)
         })
-        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
     }
 
     pub fn test_integration(&self) -> Result<String> {
-        Python::with_gil(|py| {
+        if !self.initialized {
+            return Err(BridgeError::NotInitialized);
+        }
+        with_python(|py| {
             let nexum_ai = PyModule::import(py, "nexum_ai.optimizer")?;
             let test_func = nexum_ai.getattr("test_vectorization")?;
             let result = test_func.call0()?;
             let result_str: String = result.str()?.extract()?;
             Ok(result_str)
         })
-        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
     }
 }
 
 pub struct SemanticCache {
     bridge: PythonBridge,
-    cache: PyObject,
+    cache: Py<PyAny>,
 }
 
 impl SemanticCache {
@@ -75,18 +86,18 @@ impl SemanticCache {
         let mut bridge = PythonBridge::new()?;
         bridge.initialize()?;
 
-        let cache = Python::with_gil(|py| {
+        let cache = with_python(|py| {
             let nexum_ai = PyModule::import(py, "nexum_ai.optimizer")?;
             let semantic_cache_class = nexum_ai.getattr("SemanticCache")?;
             let cache_instance = semantic_cache_class.call1((0.95, cache_file))?;
-            Ok::<PyObject, PyErr>(cache_instance.unbind())
+            Ok(cache_instance.unbind())
         })?;
 
         Ok(Self { bridge, cache })
     }
 
     pub fn get(&self, query: &str) -> Result<Option<String>> {
-        Python::with_gil(|py| {
+        with_python(|py| {
             let cache_bound = self.cache.bind(py);
             let result = cache_bound.call_method1("get", (query,))?;
 
@@ -97,16 +108,14 @@ impl SemanticCache {
                 Ok(Some(value))
             }
         })
-        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
     }
 
     pub fn put(&self, query: &str, result: &str) -> Result<()> {
-        Python::with_gil(|py| {
+        with_python(|py| {
             let cache_bound = self.cache.bind(py);
             cache_bound.call_method1("put", (query, result))?;
-            Ok::<(), PyErr>(())
+            Ok(())
         })
-        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
     }
 
     pub fn vectorize(&self, text: &str) -> Result<Vec<f32>> {
@@ -114,56 +123,51 @@ impl SemanticCache {
     }
 
     pub fn save_cache(&self) -> Result<()> {
-        Python::with_gil(|py| {
+        with_python(|py| {
             let cache_bound = self.cache.bind(py);
             cache_bound.call_method0("save_cache")?;
-            Ok::<(), PyErr>(())
+            Ok(())
         })
-        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
     }
 
     pub fn load_cache(&self) -> Result<()> {
-        Python::with_gil(|py| {
+        with_python(|py| {
             let cache_bound = self.cache.bind(py);
             cache_bound.call_method0("load_cache")?;
-            Ok::<(), PyErr>(())
+            Ok(())
         })
-        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
     }
 
     pub fn clear_cache(&self) -> Result<()> {
-        Python::with_gil(|py| {
+        with_python(|py| {
             let cache_bound = self.cache.bind(py);
             cache_bound.call_method0("clear")?;
-            Ok::<(), PyErr>(())
+            Ok(())
         })
-        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
     }
 
     pub fn get_cache_stats(&self) -> Result<String> {
-        Python::with_gil(|py| {
+        with_python(|py| {
             let cache_bound = self.cache.bind(py);
             let result = cache_bound.call_method0("get_cache_stats")?;
             let stats_str: String = result.str()?.extract()?;
             Ok(stats_str)
         })
-        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
     }
 
     pub fn explain_query(&self, query: &str) -> Result<String> {
-        Python::with_gil(|py| {
+        with_python(|py| {
             let cache_bound = self.cache.bind(py);
             let result = cache_bound.call_method1("explain_query", (query,))?;
             let explain_str: String = result.str()?.extract()?;
             Ok(explain_str)
         })
-        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
     }
 }
 
 pub struct NLTranslator {
     _bridge: PythonBridge,
-    translator: PyObject,
+    translator: Py<PyAny>,
 }
 
 impl NLTranslator {
@@ -171,13 +175,12 @@ impl NLTranslator {
         let mut bridge = PythonBridge::new()?;
         bridge.initialize()?;
 
-        let translator = Python::with_gil(|py| {
+        let translator = with_python(|py| {
             let nexum_ai = PyModule::import(py, "nexum_ai.translator")?;
             let translator_class = nexum_ai.getattr("NLTranslator")?;
             let translator_instance = translator_class.call0()?;
-            Ok::<PyObject, PyErr>(translator_instance.unbind())
+            Ok(translator_instance.unbind())
         })?;
-
         Ok(Self {
             _bridge: bridge,
             translator,
@@ -185,14 +188,13 @@ impl NLTranslator {
     }
 
     pub fn translate(&self, natural_query: &str, schema: &str) -> Result<String> {
-        Python::with_gil(|py| {
+        with_python(|py| {
             let translator_bound = self.translator.bind(py);
             let result = translator_bound.call_method1("translate", (natural_query, schema))?;
 
             let sql: String = result.extract()?;
             Ok(sql)
         })
-        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
     }
 }
 
@@ -208,7 +210,7 @@ impl QueryExplainer {
     }
 
     pub fn explain(&self, query: &str) -> Result<String> {
-        Python::with_gil(|py| {
+        with_python(|py| {
             let nexum_ai = PyModule::import(py, "nexum_ai.optimizer")?;
             let explain_func = nexum_ai.getattr("explain_query_plan")?;
             let format_func = nexum_ai.getattr("format_explain_output")?;
@@ -218,11 +220,10 @@ impl QueryExplainer {
             let output: String = formatted.extract()?;
             Ok(output)
         })
-        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
     }
 
     pub fn explain_raw(&self, query: &str) -> Result<String> {
-        Python::with_gil(|py| {
+        with_python(|py| {
             let nexum_ai = PyModule::import(py, "nexum_ai.optimizer")?;
             let explain_func = nexum_ai.getattr("explain_query_plan")?;
 
@@ -230,7 +231,6 @@ impl QueryExplainer {
             let output: String = result.str()?.extract()?;
             Ok(output)
         })
-        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
     }
 }
 
@@ -241,11 +241,16 @@ mod tests {
     fn check_python_available() -> bool {
         let mut bridge = PythonBridge::new().unwrap();
         bridge.initialize().is_ok()
-            && Python::with_gil(|py| PyModule::import(py, "nexum_ai.optimizer").is_ok())
+            && Python::try_attach(|py| PyModule::import(py, "nexum_ai.optimizer").is_ok())
+                .unwrap_or(false)
     }
 
     #[test]
     fn test_python_bridge_initialization() {
+        if !check_python_available() {
+            println!("Skipping test: Python environment not available");
+            return;
+        }
         let mut bridge = PythonBridge::new().unwrap();
         bridge.initialize().unwrap();
         assert!(bridge.initialized);
