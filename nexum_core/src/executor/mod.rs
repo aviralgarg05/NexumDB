@@ -1,6 +1,7 @@
 use crate::bridge::SemanticCache;
 use crate::catalog::Catalog;
 use crate::sql::types::{Column, DataType, SelectItem, Statement, Value};
+use crate::storage::error::ErrorCode;
 use crate::storage::{find_similar_keys, Result, StorageEngine, StorageError};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -12,6 +13,7 @@ use std::time::Instant;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub mod filter;
+pub mod filter_error;
 use filter::ExpressionEvaluator;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,7 +44,22 @@ pub struct Executor {
     tx_state: Mutex<Option<TransactionState>>,
     tx_counter: AtomicU64,
 }
-
+impl StorageError {
+    pub fn read(reason: impl Into<String>) -> Self {
+        StorageError::ReadError {
+            code: ErrorCode::NxmStor102,
+            reason: reason.into(),
+            suggestion: String::new(),
+        }
+    }
+    pub fn write(reason: impl Into<String>) -> Self {
+        StorageError::WriteError {
+            code: ErrorCode::NxmStor102,
+            reason: reason.into(),
+            suggestion: String::new(),
+        }
+    }
+}
 impl Executor {
     pub fn new(storage: StorageEngine) -> Self {
         let catalog = Catalog::new(storage.clone());
@@ -195,11 +212,13 @@ impl Executor {
                         let col_idx = column_names
                             .iter()
                             .position(|c| c == &order_clause.column)
-                            .ok_or_else(|| {
-                                StorageError::ReadError(format!(
+                            .ok_or_else(|| StorageError::ReadError {
+                                code: ErrorCode::NxmStor103,
+                                reason: format!(
                                     "Column {} not found in table {}",
                                     order_clause.column, table
-                                ))
+                                ),
+                                suggestion: "Check column name in ORDER BY clause".to_string(),
                             })?;
 
                         rows.sort_by(|a, b| {
@@ -336,9 +355,7 @@ impl Executor {
                                     // Row doesn't match WHERE condition, skip
                                 }
                                 Err(e) => {
-                                    return Err(StorageError::ReadError(format!(
-                                            "WHERE clause evaluation failed on row: {}. No rows were deleted.", e
-                                        )));
+                                    return Err(StorageError::FilterError(e));
                                 }
                             }
                         }
@@ -398,7 +415,7 @@ impl Executor {
                     std::collections::HashSet::new();
                 for (col_name, _) in &assignments {
                     if !seen_columns.insert(col_name.as_str()) {
-                        return Err(StorageError::ReadError(format!(
+                        return Err(StorageError::read(format!(
                             "Duplicate column assignment for '{}'",
                             col_name
                         )));
@@ -412,11 +429,11 @@ impl Executor {
                         column_names
                             .iter()
                             .position(|c| c == col_name)
-                            .ok_or_else(|| {
-                                StorageError::ReadError(format!(
-                                    "Column {} not found in table {}",
-                                    col_name, table
-                                ))
+                            .ok_or_else(|| StorageError::ReadError {
+                                code: ErrorCode::NxmStor103,
+                                reason: format!("Column {} not found in table {}", col_name, table),
+                                suggestion: "Verify the column name exists in the table schema"
+                                    .to_string(),
                             })?;
 
                     let expected_type = &schema.columns[col_idx].data_type;
@@ -438,12 +455,8 @@ impl Executor {
                         let should_update = if let Some(ref where_expr) = where_clause {
                             match evaluator.evaluate(where_expr, &row.values) {
                                 Ok(result) => result,
-                                Err(e) => {
-                                    return Err(StorageError::ReadError(format!(
-                                        "WHERE clause evaluation failed: {}. No rows were updated.",
-                                        e
-                                    )));
-                                }
+
+                                Err(e) => return Err(e.into()),
                             }
                         } else {
                             true // No WHERE clause means update all rows
@@ -455,7 +468,7 @@ impl Executor {
                                 if let Some(value) = row.values.get_mut(*col_idx) {
                                     *value = new_value.clone();
                                 } else {
-                                    return Err(StorageError::ReadError(format!(
+                                    return Err(StorageError::read(format!(
                                         "Row data corrupted: column index {} out of bounds (row has {} values)",
                                         col_idx,
                                         row.values.len()
@@ -474,9 +487,7 @@ impl Executor {
 
                     // Serialize all rows first, fail early if any serialization fails
                     for (key, row) in updates {
-                        let value = serde_json::to_vec(&row).map_err(|e| {
-                            StorageError::WriteError(format!("Failed to serialize row: {}", e))
-                        })?;
+                        let value = serde_json::to_vec(&row)?;
                         batch_operations.push((key, value));
                     }
 
@@ -510,12 +521,12 @@ impl Executor {
     fn lock_tx_state(&self) -> Result<MutexGuard<'_, Option<TransactionState>>> {
         self.tx_state
             .lock()
-            .map_err(|_| StorageError::ReadError("Transaction state lock poisoned".to_string()))
+            .map_err(|_| StorageError::read("Transaction state lock poisoned".to_string()))
     }
 
     fn begin_transaction(&self) -> Result<ExecutionResult> {
         if self.lock_tx_state()?.is_some() {
-            return Err(StorageError::WriteError(
+            return Err(StorageError::write(
                 "A transaction is already active. Commit or rollback before BEGIN.".to_string(),
             ));
         }
@@ -546,7 +557,7 @@ impl Executor {
         let (tx_id, writes) = {
             let state_ref = self.lock_tx_state()?;
             let state = state_ref.as_ref().ok_or_else(|| {
-                StorageError::ReadError("No active transaction. Use BEGIN first.".to_string())
+                StorageError::read("No active transaction. Use BEGIN first.".to_string())
             })?;
             (state.tx_id, state.write_count)
         };
@@ -566,7 +577,7 @@ impl Executor {
         let (tx_id, snapshot) = {
             let state_ref = self.lock_tx_state()?;
             let state = state_ref.as_ref().ok_or_else(|| {
-                StorageError::ReadError("No active transaction. Use BEGIN first.".to_string())
+                StorageError::read("No active transaction. Use BEGIN first.".to_string())
             })?;
             (state.tx_id, state.snapshot.clone())
         };
@@ -601,7 +612,7 @@ impl Executor {
         }
 
         let snapshot = wal.snapshot.ok_or_else(|| {
-            StorageError::ReadError("WAL recovery failed: missing snapshot for transaction".into())
+            StorageError::read("WAL recovery failed: missing snapshot for transaction")
         })?;
 
         self.restore_snapshot(&snapshot)?;
@@ -623,9 +634,9 @@ impl Executor {
             return Ok(None);
         }
 
-        let bytes = fs::read(path).map_err(|e| StorageError::ReadError(e.to_string()))?;
-        let wal: TxWalFile =
-            serde_json::from_slice(&bytes).map_err(|e| StorageError::ReadError(e.to_string()))?;
+        let bytes = fs::read(path).map_err(|e| StorageError::read(e.to_string()))?;
+        let wal: TxWalFile = serde_json::from_slice(&bytes)?;
+        //.map_err(|e| StorageError::read(e.to_string()))?;
         Ok(Some(wal))
     }
 
@@ -635,15 +646,16 @@ impl Executor {
         };
 
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|e| StorageError::WriteError(e.to_string()))?;
+            fs::create_dir_all(parent).map_err(|e| StorageError::write(e.to_string()))?;
         }
 
-        let data = serde_json::to_vec(wal).map_err(|e| StorageError::WriteError(e.to_string()))?;
-        let mut file = File::create(path).map_err(|e| StorageError::WriteError(e.to_string()))?;
+        let data = serde_json::to_vec(wal)?;
+        //.map_err(|e| StorageError::write(e.to_string()))?;
+        let mut file = File::create(path).map_err(|e| StorageError::write(e.to_string()))?;
         file.write_all(&data)
-            .map_err(|e| StorageError::WriteError(e.to_string()))?;
+            .map_err(|e| StorageError::write(e.to_string()))?;
         file.sync_all()
-            .map_err(|e| StorageError::WriteError(e.to_string()))?;
+            .map_err(|e| StorageError::write(e.to_string()))?;
         Ok(())
     }
 
@@ -655,7 +667,7 @@ impl Executor {
         match fs::remove_file(path) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(StorageError::WriteError(e.to_string())),
+            Err(e) => Err(StorageError::write(e.to_string())),
         }
     }
 
@@ -698,7 +710,7 @@ impl Executor {
         if let Some(cache) = &self.cache {
             cache
                 .clear_cache()
-                .map_err(|e| StorageError::WriteError(e.to_string()))?;
+                .map_err(|e| StorageError::write(e.to_string()))?;
         }
         Ok(())
     }
@@ -708,7 +720,7 @@ impl Executor {
         projection: &[SelectItem],
     ) -> Result<(Vec<usize>, Vec<String>)> {
         if projection.is_empty() {
-            return Err(StorageError::ReadError(
+            return Err(StorageError::read(
                 "SELECT projection cannot be empty".to_string(),
             ));
         }
@@ -730,7 +742,7 @@ impl Executor {
                         .iter()
                         .position(|c| c.name == *name)
                         .ok_or_else(|| {
-                            StorageError::ReadError(format!(
+                            StorageError::read(format!(
                                 "Column {} not found in table {}",
                                 name, schema.name
                             ))
@@ -757,7 +769,7 @@ impl Executor {
             let mut rows = Vec::with_capacity(values.len());
             for (row_idx, row_values) in values.iter().enumerate() {
                 if row_values.len() != schema_len {
-                    return Err(StorageError::WriteError(format!(
+                    return Err(StorageError::write(format!(
                         "INSERT row {} has {} values but table {} expects {} columns",
                         row_idx + 1,
                         row_values.len(),
@@ -780,7 +792,7 @@ impl Executor {
         let mut seen_columns = std::collections::HashSet::new();
         for column in columns {
             if !seen_columns.insert(column.as_str()) {
-                return Err(StorageError::WriteError(format!(
+                return Err(StorageError::write(format!(
                     "Duplicate column '{}' in INSERT statement",
                     column
                 )));
@@ -794,10 +806,7 @@ impl Executor {
                 .iter()
                 .position(|c| c.name == *column)
                 .ok_or_else(|| {
-                    StorageError::WriteError(format!(
-                        "Column {} not found in table {}",
-                        column, table
-                    ))
+                    StorageError::write(format!("Column {} not found in table {}", column, table))
                 })?;
             column_indices.push(col_idx);
         }
@@ -805,7 +814,7 @@ impl Executor {
         let mut rows = Vec::with_capacity(values.len());
         for (row_idx, row_values) in values.iter().enumerate() {
             if row_values.len() != columns.len() {
-                return Err(StorageError::WriteError(format!(
+                return Err(StorageError::write(format!(
                     "INSERT row {} has {} values but {} columns were specified",
                     row_idx + 1,
                     row_values.len(),
@@ -838,14 +847,14 @@ impl Executor {
                     if f.fract() == 0.0 {
                         Ok(Value::Integer(*f as i64))
                     } else {
-                        Err(StorageError::WriteError(format!(
+                        Err(StorageError::write(format!(
                             "Type mismatch for column '{}': expected Integer, got Float",
                             column_name
                         )))
                     }
                 }
                 Value::Text(t) => t.parse::<i64>().map(Value::Integer).map_err(|_| {
-                    StorageError::WriteError(format!(
+                    StorageError::write(format!(
                         "Type mismatch for column '{}': expected Integer, got Text",
                         column_name
                     ))
@@ -857,7 +866,7 @@ impl Executor {
                 Value::Float(_) => Ok(value.clone()),
                 Value::Integer(i) => Ok(Value::Float(*i as f64)),
                 Value::Text(t) => t.parse::<f64>().map(Value::Float).map_err(|_| {
-                    StorageError::WriteError(format!(
+                    StorageError::write(format!(
                         "Type mismatch for column '{}': expected Float, got Text",
                         column_name
                     ))
@@ -871,7 +880,7 @@ impl Executor {
                 Value::Integer(i) => match *i {
                     0 => Ok(Value::Boolean(false)),
                     1 => Ok(Value::Boolean(true)),
-                    _ => Err(StorageError::WriteError(format!(
+                    _ => Err(StorageError::write(format!(
                         "Type mismatch for column '{}': expected Boolean, got Integer",
                         column_name
                     ))),
@@ -882,7 +891,7 @@ impl Executor {
                     } else if *f == 1.0 {
                         Ok(Value::Boolean(true))
                     } else {
-                        Err(StorageError::WriteError(format!(
+                        Err(StorageError::write(format!(
                             "Type mismatch for column '{}': expected Boolean, got Float",
                             column_name
                         )))
@@ -893,7 +902,7 @@ impl Executor {
                     match normalized.as_str() {
                         "true" | "1" => Ok(Value::Boolean(true)),
                         "false" | "0" => Ok(Value::Boolean(false)),
-                        _ => Err(StorageError::WriteError(format!(
+                        _ => Err(StorageError::write(format!(
                             "Type mismatch for column '{}': expected Boolean, got Text",
                             column_name
                         ))),
@@ -901,7 +910,7 @@ impl Executor {
                 }
                 Value::Null => Ok(Value::Null),
             },
-            DataType::Null => Err(StorageError::WriteError(format!(
+            DataType::Null => Err(StorageError::write(format!(
                 "Column '{}' does not accept non-null values",
                 column_name
             ))),
@@ -979,7 +988,7 @@ impl Executor {
         if let Some(cache) = &self.cache {
             cache
                 .save_cache()
-                .map_err(|e| StorageError::WriteError(e.to_string()))?;
+                .map_err(|e| StorageError::write(e.to_string()))?;
             println!("Semantic cache saved to disk");
         } else {
             println!("No semantic cache to save");
@@ -991,7 +1000,7 @@ impl Executor {
         if let Some(cache) = &self.cache {
             cache
                 .clear_cache()
-                .map_err(|e| StorageError::WriteError(e.to_string()))?;
+                .map_err(|e| StorageError::write(e.to_string()))?;
             println!("Semantic cache cleared");
         } else {
             println!("No semantic cache to clear");
@@ -1003,7 +1012,7 @@ impl Executor {
         if let Some(cache) = &self.cache {
             cache
                 .get_cache_stats()
-                .map_err(|e| StorageError::ReadError(e.to_string()))
+                .map_err(|e| StorageError::read(e.to_string()))
         } else {
             Ok("No semantic cache enabled".to_string())
         }
