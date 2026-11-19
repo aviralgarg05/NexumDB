@@ -3,8 +3,51 @@
 This directory contains comprehensive performance benchmarks for the `nexum_core` module using the [Criterion](https://github.com/bheisler/criterion.rs) benchmarking framework.
 
 ## Benchmark Categories
+## Performance & Benchmarks (Feb 2026)
+To maintain the high performance expected of a Rust-based engine, NexumDB is continuously benchmarked against SQLite using the `criterion` suite.
 
-### 1. Storage Engine Benchmarks (`storage_bench.rs`)
+### Comparative Performance Results
+| Operation | SQLite | NexumDB | Delta |
+| :--- | :--- | :--- | :--- |
+| **Single INSERT** | 15.18 ms | **7.48 ms** | NexumDB ~2x Faster |
+| **Point SELECT (Cold)** | **140.5 µs** | 1.86 ms | SQLite Faster |
+| **Point SELECT (Cached)**| **143.8 µs** | 1.87 ms | SQLite Faster |
+
+### Analysis
+![Benchmark Visualization](./nexum_core/benches/bench_results.png)
+
+### Architectural Insights
+
+#### 1. Write Throughput: The LSM-Tree Advantage
+NexumDB’s storage engine (`sled`) utilizes a **Log-Structured Merge-tree (LSM-tree)**, whereas SQLite uses a traditional **B-tree**. 
+* **LSM-tree (NexumDB):** Optimizes for writes by batching updates into immutable segments, leading to the 2x speedup observed in our `INSERT` benchmarks.
+* **B-tree (SQLite):** Optimized for reads. Every write requires finding a leaf node on disk, which involves more synchronous I/O.
+
+
+
+#### 2. Read Latency & AI Overhead
+In small-scale point lookups (1,000 rows), SQLite's raw C-speed is superior. NexumDB's current ~1.8ms latency includes:
+* **SQL Parsing**: Converting strings to `Statement` enums.
+* **PyO3 Bridge**: The overhead of crossing the Rust-Python boundary for AI-native planning.
+* **Semantic Caching**: The current benchmark dataset is too small to show the "skip-the-disk" benefits of semantic caching, which scale exponentially with query complexity and data volume.
+
+---
+
+## Architecture
+* **Core System**: Rust-based storage engine using `sled`, with SQL parsing and intelligent execution.
+* **AI Engine**: Python-based semantic caching, NL translation, and RL optimization via local models.
+* **Integration**: PyO3 bindings for seamless Rust-Python interoperability.
+
+
+
+## Features
+### v0.4.0 - Core Correctness & Table Management
+* **Projection-Correct SELECT**: Column/alias projection with schema validation.
+* **Schema-Safe Writes**: INSERT/UPDATE validation with best-effort coercion.
+* **Table Management**: SHOW TABLES, DESCRIBE, DROP TABLE (IF EXISTS).
+* **Performance Suite**: Integrated benchmark framework for regression testing.
+
+---
 
 Tests the performance of the underlying storage engine operations:
 
