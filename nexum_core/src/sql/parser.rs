@@ -30,6 +30,29 @@ impl Parser {
 
     fn convert_statement(stmt: &SqlStatement) -> Result<Statement> {
         match stmt {
+            // In your convert_statement match block:
+            SqlStatement::Drop {
+                object_type,
+                if_exists,
+                names,
+                ..
+            } => {
+                if *object_type != ast::ObjectType::Table {
+                    return Err(anyhow!("Only DROP TABLE is supported"));
+                }
+
+                // sqlparser stores names in a Vec (to handle things like db.schema.table)
+                let table_name = names
+                    .first()
+                    .ok_or_else(|| anyhow!("Missing table name"))?
+                    .to_string();
+
+                Ok(Statement::DropTable {
+                    name: table_name,
+                    if_exists: *if_exists,
+                })
+            }
+
             SqlStatement::CreateTable { name, columns, .. } => {
                 let table_name = name.to_string();
                 let cols = columns
@@ -250,30 +273,6 @@ impl Parser {
         if tokens.len() == 2 && tokens[0].eq_ignore_ascii_case("describe") {
             let table = Self::clean_identifier(tokens[1]);
             return Ok(Some(Statement::DescribeTable { name: table }));
-        }
-
-        if tokens.len() == 3
-            && tokens[0].eq_ignore_ascii_case("drop")
-            && tokens[1].eq_ignore_ascii_case("table")
-        {
-            let table = Self::clean_identifier(tokens[2]);
-            return Ok(Some(Statement::DropTable {
-                name: table,
-                if_exists: false,
-            }));
-        }
-
-        if tokens.len() == 5
-            && tokens[0].eq_ignore_ascii_case("drop")
-            && tokens[1].eq_ignore_ascii_case("table")
-            && tokens[2].eq_ignore_ascii_case("if")
-            && tokens[3].eq_ignore_ascii_case("exists")
-        {
-            let table = Self::clean_identifier(tokens[4]);
-            return Ok(Some(Statement::DropTable {
-                name: table,
-                if_exists: true,
-            }));
         }
 
         Ok(None)
