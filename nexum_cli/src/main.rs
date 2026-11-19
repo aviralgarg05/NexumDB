@@ -6,7 +6,13 @@ use nexum_core::{
     executor::ExecutionResult, Catalog, Executor, NLTranslator, Parser as SqlParser,
     QueryExplainer, StorageEngine,
 };
-use std::io::{self, Write};
+use rustyline::completion::{Completer, Pair};
+use rustyline::error::ReadlineError;
+use rustyline::highlight::Highlighter;
+use rustyline::hint::Hinter;
+use rustyline::validate::Validator;
+use rustyline::{Context, Editor, Helper};
+use std::rc::Rc;
 use std::time::Duration;
 
 /// NexumDB - AI-Native Database with Natural Language Support
@@ -50,6 +56,162 @@ struct Args {
     json: bool,
 }
 
+/// SQL keywords for auto-completion.
+const SQL_KEYWORDS: &[&str] = &[
+    "SELECT",
+    "INSERT",
+    "INTO",
+    "VALUES",
+    "CREATE",
+    "TABLE",
+    "DROP",
+    "DELETE",
+    "FROM",
+    "WHERE",
+    "UPDATE",
+    "SET",
+    "AND",
+    "OR",
+    "NOT",
+    "ORDER",
+    "BY",
+    "ASC",
+    "DESC",
+    "LIMIT",
+    "LIKE",
+    "IN",
+    "BETWEEN",
+    "JOIN",
+    "ON",
+    "GROUP",
+    "HAVING",
+    "DISTINCT",
+    "AS",
+    "NULL",
+    "INTEGER",
+    "FLOAT",
+    "TEXT",
+    "BOOLEAN",
+    "BEGIN",
+    "COMMIT",
+    "ROLLBACK",
+    "SHOW",
+    "TABLES",
+    "DESCRIBE",
+    "IF",
+    "EXISTS",
+    "EXPLAIN",
+    "ASK",
+    "TRANSACTION",
+];
+
+/// Rustyline helper that provides tab-completion for SQL keywords,
+/// table names from the catalog, and column names when a table context
+/// can be inferred.
+struct NexumCompleter {
+    catalog: Rc<Catalog>,
+}
+
+impl NexumCompleter {
+    fn new(catalog: Rc<Catalog>) -> Self {
+        Self { catalog }
+    }
+
+    /// Try to detect a table name from the input so we can offer column completions.
+    /// Looks for patterns like `FROM <table>`, `INTO <table>`, `UPDATE <table>`,
+    /// `TABLE <table>`, `DESCRIBE <table>`.
+    fn detect_table_context(&self, line: &str) -> Option<String> {
+        let upper = line.to_uppercase();
+        let context_keywords = ["FROM", "INTO", "UPDATE", "TABLE", "DESCRIBE"];
+        for kw in &context_keywords {
+            if let Some(pos) = upper.rfind(kw) {
+                let after = &line[pos + kw.len()..];
+                let table_name = after.split_whitespace().next();
+                if let Some(name) = table_name {
+                    if !name.is_empty() {
+                        return Some(name.to_string());
+                    }
+                }
+            }
+        }
+        None
+    }
+}
+
+impl Completer for NexumCompleter {
+    type Candidate = Pair;
+
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        _ctx: &Context<'_>,
+    ) -> rustyline::Result<(usize, Vec<Pair>)> {
+        let line_up_to_cursor = &line[..pos];
+        // Find the start of the current word being typed
+        let word_start = line_up_to_cursor
+            .rfind(|c: char| c.is_whitespace() || c == ',' || c == '(')
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        let prefix = &line_up_to_cursor[word_start..];
+
+        if prefix.is_empty() {
+            return Ok((pos, vec![]));
+        }
+
+        let prefix_upper = prefix.to_uppercase();
+        let mut candidates: Vec<Pair> = Vec::new();
+
+        // 1. SQL keyword completions
+        for kw in SQL_KEYWORDS {
+            if kw.starts_with(&prefix_upper) {
+                candidates.push(Pair {
+                    display: kw.to_string(),
+                    replacement: kw.to_string(),
+                });
+            }
+        }
+
+        // 2. Table name completions
+        if let Ok(tables) = self.catalog.list_tables() {
+            for table in &tables {
+                let table_upper = table.to_uppercase();
+                if table_upper.starts_with(&prefix_upper) {
+                    candidates.push(Pair {
+                        display: table.clone(),
+                        replacement: table.clone(),
+                    });
+                }
+            }
+        }
+
+        // 3. Column name completions when a table context is available
+        if let Some(table_name) = self.detect_table_context(line_up_to_cursor) {
+            if let Ok(Some(schema)) = self.catalog.get_table(&table_name) {
+                for col in &schema.columns {
+                    let col_upper = col.name.to_uppercase();
+                    if col_upper.starts_with(&prefix_upper) {
+                        candidates.push(Pair {
+                            display: col.name.clone(),
+                            replacement: col.name.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok((word_start, candidates))
+    }
+}
+
+impl Hinter for NexumCompleter {
+    type Hint = String;
+}
+
+impl Highlighter for NexumCompleter {}
+impl Validator for NexumCompleter {}
+impl Helper for NexumCompleter {}
+
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
@@ -58,7 +220,7 @@ fn main() -> anyhow::Result<()> {
     let spinner = create_spinner("Initializing database engine...");
     let storage = StorageEngine::new("./nexumdb_data")?;
     let executor = Executor::new(storage.clone()).with_cache();
-    let catalog = Catalog::new(storage);
+    let catalog = Rc::new(Catalog::new(storage));
     spinner.finish_with_message("✓ Database engine ready".green().to_string());
 
     let spinner = create_spinner("Loading NL translator...");
@@ -94,110 +256,130 @@ fn main() -> anyhow::Result<()> {
         }
     };
 
+    // Set up rustyline editor with auto-completion
+    let completer = NexumCompleter::new(Rc::clone(&catalog));
+    let mut editor = Editor::new()?;
+    editor.set_helper(Some(completer));
+
+    // Determine history file path (default: ~/.nexumdb_history)
+    let history_path = dirs::home_dir().map(|h| h.join(".nexumdb_history"));
+    if let Some(ref path) = history_path {
+        let _ = editor.load_history(path); // Ignore error on first run
+    }
+
     println!();
     print_help_summary();
     println!();
 
     loop {
-        print!("{} ", "nexumdb>".bold().cyan());
-        io::stdout().flush()?;
+        let prompt = format!("{} ", "nexumdb>".bold().cyan());
+        match editor.readline(&prompt) {
+            Ok(line) => {
+                let input = line.trim();
 
-        let mut input = String::new();
-        let bytes_read = io::stdin().read_line(&mut input)?;
-        if bytes_read == 0 {
-            // EOF reached (e.g., piped input exhausted)
-            println!("{}", "Goodbye! 👋".green().bold());
-            break;
-        }
+                if input.is_empty() {
+                    continue;
+                }
 
-        let input = input.trim();
+                let _ = editor.add_history_entry(input);
 
-        if input.is_empty() {
-            continue;
-        }
+                if input.eq_ignore_ascii_case("exit") || input.eq_ignore_ascii_case("quit") {
+                    println!("{}", "Goodbye! 👋".green().bold());
+                    break;
+                }
 
-        if input.eq_ignore_ascii_case("exit") || input.eq_ignore_ascii_case("quit") {
-            println!("{}", "Goodbye! 👋".green().bold());
-            break;
-        }
+                if input.eq_ignore_ascii_case("help") {
+                    print_full_help();
+                    continue;
+                }
 
-        if input.eq_ignore_ascii_case("help") {
-            print_full_help();
-            continue;
-        }
+                if input.len() >= 4 && input[..4].eq_ignore_ascii_case("ASK ") {
+                    let natural_query = input[4..].trim();
 
-        if input.len() >= 4 && input[..4].eq_ignore_ascii_case("ASK ") {
-            let natural_query = input[4..].trim();
+                    if let Some(ref translator) = nl_translator {
+                        let schema = get_schema_context(&catalog);
 
-            if let Some(ref translator) = nl_translator {
-                let schema = get_schema_context(&catalog);
+                        let spinner = create_spinner(&format!("Translating: '{}'", natural_query));
+                        match translator.translate(natural_query, &schema) {
+                            Ok(sql) => {
+                                spinner.finish_and_clear();
+                                println!("{} {}", "Generated SQL:".cyan().bold(), sql.white());
+                                println!();
 
-                let spinner = create_spinner(&format!("Translating: '{}'", natural_query));
-                match translator.translate(natural_query, &schema) {
-                    Ok(sql) => {
-                        spinner.finish_and_clear();
-                        println!("{} {}", "Generated SQL:".cyan().bold(), sql.white());
-                        println!();
-
-                        match SqlParser::parse(&sql) {
-                            Ok(statement) => match executor.execute(statement) {
-                                Ok(result) => {
-                                    print_result(&result, args.json);
+                                match SqlParser::parse(&sql) {
+                                    Ok(statement) => match executor.execute(statement) {
+                                        Ok(result) => {
+                                            print_result(&result, args.json);
+                                        }
+                                        Err(e) => {
+                                            print_error("Execution error", &e.to_string());
+                                        }
+                                    },
+                                    Err(e) => {
+                                        print_error("Parse error", &e.to_string());
+                                    }
                                 }
-                                Err(e) => {
-                                    print_error("Execution error", &e.to_string());
-                                }
-                            },
+                            }
                             Err(e) => {
-                                print_error("Parse error", &e.to_string());
+                                spinner.finish_and_clear();
+                                print_error("Translation error", &e.to_string());
                             }
                         }
+                    } else {
+                        print_error("Error", "Natural language translator not available");
                     }
+                    continue;
+                }
+
+                // Handle EXPLAIN command
+                if input.len() >= 8 && input[..8].eq_ignore_ascii_case("EXPLAIN ") {
+                    let query_to_explain = input[8..].trim();
+
+                    if let Some(ref explainer) = query_explainer {
+                        println!();
+                        match explainer.explain(query_to_explain) {
+                            Ok(plan) => {
+                                println!("{}", "Query Execution Plan:".cyan().bold());
+                                println!("{}", plan);
+                            }
+                            Err(e) => {
+                                print_error("Explain error", &e.to_string());
+                            }
+                        }
+                    } else {
+                        print_error("Error", "Query explainer not available");
+                    }
+                    continue;
+                }
+
+                match SqlParser::parse(input) {
+                    Ok(statement) => match executor.execute(statement) {
+                        Ok(result) => {
+                            print_result(&result, args.json);
+                        }
+                        Err(e) => {
+                            print_error("Execution error", &e.to_string());
+                        }
+                    },
                     Err(e) => {
-                        spinner.finish_and_clear();
-                        print_error("Translation error", &e.to_string());
+                        print_error("Parse error", &e.to_string());
                     }
                 }
-            } else {
-                print_error("Error", "Natural language translator not available");
             }
-            continue;
-        }
-
-        // Handle EXPLAIN command
-        if input.len() >= 8 && input[..8].eq_ignore_ascii_case("EXPLAIN ") {
-            let query_to_explain = input[8..].trim();
-
-            if let Some(ref explainer) = query_explainer {
-                println!();
-                match explainer.explain(query_to_explain) {
-                    Ok(plan) => {
-                        println!("{}", "Query Execution Plan:".cyan().bold());
-                        println!("{}", plan);
-                    }
-                    Err(e) => {
-                        print_error("Explain error", &e.to_string());
-                    }
-                }
-            } else {
-                print_error("Error", "Query explainer not available");
+            Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
+                println!("{}", "Goodbye! 👋".green().bold());
+                break;
             }
-            continue;
-        }
-
-        match SqlParser::parse(input) {
-            Ok(statement) => match executor.execute(statement) {
-                Ok(result) => {
-                    print_result(&result, args.json);
-                }
-                Err(e) => {
-                    print_error("Execution error", &e.to_string());
-                }
-            },
-            Err(e) => {
-                print_error("Parse error", &e.to_string());
+            Err(err) => {
+                print_error("Input error", &err.to_string());
+                break;
             }
         }
+    }
+
+    // Save history on exit
+    if let Some(ref path) = history_path {
+        let _ = editor.save_history(path);
     }
 
     Ok(())
@@ -597,7 +779,7 @@ fn value_to_json(value: &nexum_core::sql::types::Value) -> serde_json::Value {
     }
 }
 
-fn get_schema_context(catalog: &Catalog) -> String {
+fn get_schema_context(catalog: &Rc<Catalog>) -> String {
     match catalog.list_tables() {
         Ok(tables) => {
             let mut schema = String::new();
